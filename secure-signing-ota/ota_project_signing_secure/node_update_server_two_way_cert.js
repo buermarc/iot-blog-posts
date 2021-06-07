@@ -10,6 +10,7 @@ var PORT = 8080;
 // Without middleware
 app.get('/firmware.bin.signed', function(req, res, next){
     if (!req.client.authorized) {
+        console.log('Client can not be authenticated');
         return res.status(401).send('Invalid client certificate authentication.');
     }
     var options = {

@@ -1,0 +1,114 @@
+# OTA Updates für den ESP8266
+
+In diesem Blog Eintrag möchten wir gerne ein Überblick über den momentanen Stand
+der Update Funktion unserer Mikrocontroller geben. Die technischen Details gibt
+es in weiteren Beiträgen, hier gibt es erstmal eine Architektur Übersicht und
+ein bisschen Background um Gründe, und Herangehensweise zu verstehen. 
+
+Für unser Projekt brauchen wir verschiedene Sensoren, welche an einen ESP8266
+angeschlossen werden.
+Die gemessen Daten werden hierbei per MQTT Protokoll versendet. 
+
+Ein großer Vorteil von der Balena Cloud ist deren Funktion durch Container Files
+laufende Services auf einzelnen Raspberry Pis zu aktualisieren. Gegeben ein Pi
+wird als Platform für ein Backend oder auch als Sensor benutzt, so kann die
+laufende Applikation mit Hilfe von Balena bei Bedarf aktualisiert werden.
+
+Der ESP8266 ist ein Mikrocontroller und kann kurz gesagt nicht in gleicher
+Weise in die Balena Cloud mit eingebunden werden. Um dennoch mit Hilfe der Balena
+Cloud die Logik welche auf dem ESP8266 ausgeführt aktualisieren zu können müssen
+wir ein bisschen kreativer werden.
+
+Eine mögliche Herangehensweise wäre das Nutzen von Over-The-Air (OTA) Updates.
+Hier wird dem ESP8266 eine neuen Applikation über das Netzwerk bereitgestellt,
+welche von dem Mikrocontroller geladen und gespeichert wird. Nach dem Schreiben
+auf den Speicher des Mikrocontrollers startet dieser neu und lädt die
+aktualisierte Version.
+
+```bash
++------------+                
+| ESP8266 V1 | -- Update --+  
++------------+             |  
+1) load file               |
+2) save file               |
+3) reboot                  |
++------------+             |
+| ESP8266 V2 | <-----------+
++------------+
+```
+
+Momentan nutzen wir das Arduino "Framework" zum Programmieren des ESP8266. Mit
+dessen Hilfe können wir bequem alle benötigten Sensoren auslesen, sowie auch
+eine MQTT Verbindung aufbauen. Wie in der
+[Dokumentation](https://arduino-esp8266.readthedocs.io/en/latest/ota_updates/readme.html#http-server)
+beschrieben wird OTA
+unterstützt.
+
+
+Das Arduino Framework bietet verschiedene OTA Möglichkeiten:
+
+- OTA mit der Arduino IDE
+
+    Normalerweise wird der ESP per Serial Port (ESP und Computer sind per USB
+    verbunden)  mit der Applikation bespielt (geflasht). Wobei die Applikation
+    hierbei in kompilierter Form als binäre Datei vorliegt. Diese Art der OTA
+    Updates benötigt eine geöffnete Arduino IDE in welcher per Hand anstatt des
+    Serial Ports ein Netzwerk Port ausgewählt wird. => Nicht wirklich
+    automatisierbar.
+
+- OTA über den Webbrowser
+    
+    Hier stellt der ESP selbst ein Webserver bereit, welcher per Browser
+    aufgerufen werden kann, und die binäre Datei mit neuer Logik hochgeladen
+    werden kann. => Nur schwer automatisierbar.
+
+- OTA über einen HTTP Server
+
+    Hier fragt der Server einen dritten HTTP Server an, welcher die binäre Datei
+    überträgt. => Gut automatisierbar.
+
+Für eine Integration mit der Balena Cloud sollte OTA über einen HTTP Server
+genutzt werden. Der HTTP Server und die binäre Datei sollten via Balena Cloud
+deployed werden, und ein Event triggern, welche den einzelnen ESPs signalisiert,
+dass ein Update notwendig ist.
+
+```bash
++----------+  Update Artefakt  +---------+ / Deployed
+| ESP8266  | <---------------- | Update  | | durch 
++----------+                   | Server  | | Balena
+    |                          +---------+ \ Cloud
+    | Trigger  +---------+
+    | Update   |  MQTT   |
+    +--------- | Broker  |
+               +---------+
+```
+
+Hierbei sind allerdings einige Sicherheitsaspekte zu beachten:
+
+- Kommunikation zwischen ESP und Update Server sollte verschlüsselt sein, um zu
+  verhindern das die binäre Datei unserer Applikation abgefangen und analysiert
+  werden kann, da in ihr Informationen wie die SSID und dass Passwort des
+  lokalen Netzwerkes beinhaltet sind. Sowohl Update Server als auch ESP sollten
+  über TLS kommunizieren. Ein ESP muss validieren können ob der Update Server
+  vertrauenswürdig ist, während der Update Server validieren muss dass der ESP
+  vertrauenswürdig ist.
+
+- Die binäre Form sollte eine valide Signatur beinhalten, welche versichert dass
+  dieses Update aus unserer Herkunft entspringt. Dies sollte verhindern das
+  fremder, möglicherweise, böswilliger Code auf dem Mikrocontroller ausgeführt
+  wird.
+
+- Falls das Update Event auf welches ein ESP reagiert durch beispielsweise
+  Subscriben auf ein MQTT Topic realisiert wird, so muss sichergestellt werden,
+  dass dieses Event nur durch eine Entität erfolgt welcher wir trauen, d.h. der
+  MQTT Broker bedarf einer möglicher Authentifizierung von Clients.
+
+Die Sicherheitsaspekte werden wir noch genauer in weiteren Beiträgen
+beleuchten, jedoch zu Begin ersteinmal einen funktionierenden Prototyp
+erstellen, mit welchem wir weiter Arbeiten können, denn wie sich später noch
+herausstellen wird ist Sicherheit gar nicht so einfach.
+
+Das war es vorerst zur Architektur und unseren Anforderungen. In den nächsten
+Beiträgen stellen wir verschiedene Entwicklungsumgebung für das Entwickeln von
+Logik für den ESP8266 vor, wobei alle sich auf das Arduino Framework beziehen.
+

@@ -1,0 +1,247 @@
+In diesem Beitrag schauen wir uns verschieden Entwicklungsumgebungen für den
+ESP8266 in Verbindung mit dem Arduino Framework an. 
+Ziel des Posts ist zu zeigen wie mit zwei verschiedenen
+Entwicklungsumgebung/Tools ein Programm für den ESP8266 kompiliert und auf den
+Mikrocontroller geladen werden kann. 
+Diese Entwicklungsumgebungen brauchen wir in späteren Blog Posts, in welchen wir
+eine Applikation entwerfend möchten welche Over-The-Air Updates erlaubt.
+
+Wir behandeln im folgenden zum einen die Arduino IDE als auch das PlatformIO CLI
+Tool. Für beide Programme beschreiben wir die Installation, das Setup für den
+ESP8266 und wie ein Programm kompiliert und geladen wird. Hiernach zeigen wir,
+wie in beide Tools Bibliotheken installiert und Dateisysteme auf den ESP geladen
+werden können.
+
+## Arduino IDE
+
+Die Arduino IDE kann für Windows, Linux und Mac von der offiziellen Arduino
+Website heruntergeladen werden. 
+
+Je nach Linux Distribution ist die Arduino IDE vielleicht als ein Paket per
+Packet Manager zu erhalten. 
+Distributionen die auf Archlinux basieren brauchen zum `arduino` Packet
+zusätzlich das Paket `arduino-avr-core`
+
+- [Windows](https://www.arduino.cc/en/guide/windows)
+- [macOSX](https://www.arduino.cc/en/guide/macOSX)
+- [Linux](https://www.arduino.cc/en/guide/linux)
+
+Nach der Installation der IDE muss der ESP8266 also spezifisches Board innerhalb
+der IDE installiert werden.
+([Zusatzquelle](https://randomnerdtutorials.com/how-to-install-esp8266-board-arduino-ide/))
+
+#### Installation des Boards:
+
+1) Datei > Voreinstellungen > Zusätzliche Boardverwalter-URLs
+
+   Benötigte URL: http://arduino.esp8266.com/stable/package_esp8266com_index.json
+
+   Drücke Knopf: OK
+
+2) Werkzeuge > Board: Boardverwalter...
+
+   Suche nach: ESP8266
+
+   Drücke Knopf: Installieren
+
+#### Auswahl des richtigen Boards: 
+(Wir nutzen den ESP8266 NodeMCU 1.0)
+
+`Werkzeuge > Board: NodeMCU 1.0 ESP-12E-Module`
+
+#### Auswahl des seriellen Ports: 
+(Hierfür muss der Mikrocontroller angeschlossen sein, auf Windows sollte bspw.
+COM3 oder COM5 als mögliche Auswahl zu sehen sein)
+
+`Werkzeuge > Port: COM?`
+
+#### Um ein Beispiel Programm zu laden
+
+`Datei > Beispiels > 01. Basics > Blink`
+
+#### Um das Beispielprogramm zu Kompilieren:
+
+`Sketch > Überprüfen/Kompilieren (STRG+R)`
+
+#### Um ein Beispielprogramm auf den ESP zu laden (flashen) 
+
+`Sketch > Hochladen (STRG+U)`
+
+
+## PlatformIO
+
+Eine andere Möglichkeit bietet das PlatformIO Toolset. Auch hier gibt es eine
+IDE, welche z.B. Compiler und Editor mit sich bringt. Wir stellen jedoch die CLI
+Variante vor. Die genaue Installation ist in der
+[Dokumentation](https://docs.platformio.org/en/latest//core/installation.html)
+gut beschrieben. In den meisten Fällen sollte es als pip Paket installiert
+werden können. Es wird meines Wissens nach mindestens Python 3.6 benötigt.
+
+`pip3 install -U platformio`
+
+Im [Quick Start Guide](https://docs.platformio.org/en/latest//core/quickstart.html)
+wird das Erstellen eines Projektes dargestellt.
+Folgend die Commands um ein Projekt für den ESP8266 beispielsweise zu erstellen: 
+
+#### Erstellen eines neuen Ordners für das Projekt:
+
+```bash
+$ mkdir ex_project
+$ cd ex_project
+```
+
+#### Initialisieren des Projektes:
+```bash
+$ pio project init --board nodemcuv2
+$ tree
+ex_project
+├── include
+│  └── README
+├── lib
+│  └── README
+├── platformio.ini
+├── src
+└── test
+   └── README
+```
+
+Es können auch mehrere Boards angegeben werden `--board A --board B ...`, falls
+die Applikationen auf mehreren Geräten benötigt wird. Jedoch sollte man hier
+darauf beachten, dass manche Geräte verschieden Eigenschaften haben, wie z.B.
+eingebaute LED oder unterschiedliche PIN Belegungen. Möglicherweise sind hier
+Präprozessor Statements notwendig.
+
+#### Schreiben des Codes:
+Um Logik zu erstellen muss die Datei src/main.cpp erstellt und gefüllt werden.
+Ein Beispiels welches die LED des ESP8266 blinken lässt sieht folgend aus.
+
+```bash
+ex_project
+├── include
+│  └── README
+├── lib
+│  └── README
+├── platformio.ini
+├── src
+│  └── main.cpp <--- HERE
+└── test
+   └── README
+```
+
+```cpp
+// File src/main.cpp
+/**
+ * Blink
+ *
+ * Turns on an LED on for one second,
+ * then off for one second, repeatedly.
+ */
+#include "Arduino.h"
+
+#ifndef LED_BUILTIN
+#define LED_BUILTIN 13
+#endif
+
+void setup()
+{
+  // initialize LED digital pin as an output.
+  pinMode(LED_BUILTIN, OUTPUT);
+}
+
+void loop()
+{
+  // turn the LED on (HIGH is the voltage level)
+  digitalWrite(LED_BUILTIN, HIGH);
+
+  // wait for a second
+  delay(1000);
+
+  // turn the LED off by making the voltage LOW
+  digitalWrite(LED_BUILTIN, LOW);
+
+   // wait for a second
+  delay(1000);
+}
+```
+
+#### Kompilieren des Codes:
+
+```bash
+$ pio run
+```
+Beim ersten Ausführen werden die benötigten Werkzeuge heruntergeladen, daher
+wird es je nach Internetverbindung etwas dauern.
+
+#### Flashen des kompilierten Codes:
+```bash
+$ pio run --target upload
+```
+
+## Weitere Funktionen der Entwicklungsumgebungen
+
+### Bibliotheken
+
+Beide Entwicklungsumgebung können zudem weiter Bibliotheken installieren wie
+beispielsweise
+[PubSubClient](https://www.arduino.cc/reference/en/libraries/pubsubclient/) für
+die Kommunikation mit einem MQTT Broker.
+
+#### Arduino IDE
+
+Werkzeuge > Bibliotheken verwalten
+Suche nach: PubSubClient
+Drücke Knopf: Installieren
+
+#### PlatformIO CLI
+
+```bash
+$ pio search pubsubclient
+
+PubSubClient
+============
+#ID: 89
+A client library for MQTT messaging. MQTT is a lightweight messaging protocol ideal for small devices. This library allows you to sen
+ and receive MQTT messages. It supports the latest MQTT 3.1.1 protocol and can be configured to use the older MQTT 3.1 if needed. It
+upports all Arduino Ethernet Client compatible hardware, including the Intel Galileo/Edison, ESP8266 and TI CC3000.
+...
+$ pio lib install lib 89
+```
+Falls die ID der Bibliothek bekannt ist kann sie direkt per ID hinzugefügt
+werden.
+
+### Erstellen und hochladen von Dateisystemen
+
+Des weiteren können mit beiden Umgebungen lokale Dateisysteme auf den ESP
+geladen werden. (SPIFFS und LittleFS)
+
+#### Arduino IDE
+
+Im momentane Projekt Ordner wird ein Ordner `data` erstellt, welcher mit Dateien
+gefüllt werden kann. 
+Je nach gewünschtem Datei System wird ein Werkzeug zum erstellen und hochladen
+benötigt in [diesem
+Tutorial](https://randomnerdtutorials.com/install-esp8266-nodemcu-littlefs-arduino/)
+hat ein Tutorial zum Installieren und Anwenden des LittleFS Tools.
+
+#### PlatformIO CLI
+
+Das gewünschte Filesystem muss definiert sein, wie in der
+[Dokumentation](https://docs.platformio.org/en/latest/platforms/espressif8266.html#selecting-appropriate-filesystem)
+beschrieben Falls kein genaues Dateisystem definiert ist wird ein SPIFFS
+Dateisystem erstellt.
+
+```bash
+$ cat platform
+
+[env:nodemcuv2]
+platform = espressif8266
+board = nodemcuv2
+framework = arduino
+board_build.filesystem = littlefs
+```
+
+Um das Dateisystem hochzuladen:
+
+```bash
+$ pio run --target uploadfs
+```

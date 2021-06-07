@@ -1,0 +1,416 @@
+# Over the Air Updates - ein simples Beispiel
+
+In diesem Beitrag zeigen wir ein einfaches Over-The-Air Beispiel ohne
+Verschlüsselung und Signatur.
+
+Voraussetzung sind ein ESP8266 sowie eine Entwicklungsumgebung. In diesem
+Beispiel nutzen wir das PlatformIO CLI Tool, die Arduino IDE kann jedoch analog
+hierzu benutzt werden.
+
+Ziel ist es einen ESP über eine Netzwerkverbindung zu updaten. Hierfür benötigen
+wir zum einen entsprechende Logik auf dem ESP, als auch einen HTTP Server
+welcher das Update in binärer Form bereitstellt. In vorherigen Block Posts haben
+wir gezeigt, dass das Update eigentlich durch ein Event getriggert werden soll.
+In diesem Beispiel konzentrieren wir uns aber nur auf den OTA Aspekt und
+lassen dieses Event weg. Das Update soll hiernach einfach durch das Ablaufen
+eines Timers getriggert werden.
+
+Zu Begin initialisieren wir das Projekt das PlatformIO CLI und erstellen eine
+Datei, welche später unseren Code beinhaltet.
+
+```bash
+$ mkdir ota-example
+$ cd ota-example
+$ pio init --board nodemucv2
+$ touch src/main.cpp
+```
+
+Als nächstes können wir eine Beispiel aus dem Arduino Repository nutzen um ein
+OTA Update zu testen. Beispiel Code finden wir in den [Beispielen für die
+HttpUpdate
+Komponente](https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266httpUpdate/examples/httpUpdate/httpUpdate.ino).
+
+```cpp
+/**
+   httpUpdate.ino
+
+    Created on: 27.11.2015
+
+*/
+
+#include <Arduino.h>
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
+#ifndef APSSID
+#define APSSID "APSSID"
+#define APPSK  "APPSK"
+#endif
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+
+  Serial.begin(115200);
+  // Serial.setDebugOutput(true);
+
+  Serial.println();
+  Serial.println();
+  Serial.println();
+
+  for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(APSSID, APPSK);
+
+
+}
+
+void update_started() {
+  Serial.println("CALLBACK:  HTTP update process started");
+}
+
+void update_finished() {
+  Serial.println("CALLBACK:  HTTP update process finished");
+}
+
+void update_progress(int cur, int total) {
+  Serial.printf("CALLBACK:  HTTP update process at %d of %d bytes...\n", cur, total);
+}
+
+void update_error(int err) {
+  Serial.printf("CALLBACK:  HTTP update fatal error code %d\n", err);
+}
+
+
+void loop() {
+  // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    WiFiClient client;
+
+    // The line below is optional. It can be used to blink the LED on the board during flashing
+    // The LED will be on during download of one buffer of data from the network. The LED will
+    // be off during writing that buffer to flash
+    // On a good connection the LED should flash regularly. On a bad connection the LED will be
+    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
+    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+
+    // Add optional callback notifiers
+    ESPhttpUpdate.onStart(update_started);
+    ESPhttpUpdate.onEnd(update_finished);
+    ESPhttpUpdate.onProgress(update_progress);
+    ESPhttpUpdate.onError(update_error);
+
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "http://server/file.bin");
+    // Or:
+    //t_httpUpdate_return ret = ESPhttpUpdate.update(client, "server", 80, "file.bin");
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
+    }
+  }
+}
+```
+
+Die Callback Funktionen welche uns über den Stand des Updates informieren sind
+vorerst nicht wichtig, können aber z.B. später im Betrieb genutzt werden um
+zu Loggen, das ein ESP gerade ein Update startet bzw. beendet.
+
+```cpp
+void update_started() {
+  - Serial.println("CALLBACK:  HTTP update process started");
+  + MQTT.send(updateTopic, format("INFO: ESP%s started to update", ESP_MAC)); // Pseudo Code
+}
+
+void update_finished() {
+  - Serial.println("CALLBACK:  HTTP update process finished");
+  + MQTT.send(updateTopic, format("INFO: ESP%s successfully updated", ESP_MAC)); // Pseudo Code
+}
+
+- void update_progress(int cur, int total) {
+-   Serial.printf("CALLBACK:  HTTP update process at %d of %d bytes...\n", cur, total);
+- }
+
+void update_error(int err) {
+  - Serial.printf("CALLBACK:  HTTP update fatal error code %d\n", err);
+  + MQTT.send(updateTopic, format("ERROR: ESP%s failed to update", ESP_MAC)); // Pseudo Code
+}
+```
+ACHTUNG: In diesem Beispiel lassen wir aber ersteinmal alles so wie es ist, und
+loggen alles mit der Serial.print Funktion. Damit das OTA Update funktioniert
+müssen wir noch valide WiFi Daten hinterlegen. Wir halten uns an ihre Vorgabe
+mit Präprozessor Definitionen in der selben Datei. Für das aktive Entwickeln in
+einem Repository bietet es sich jedoch an solche Informationen in einer
+separaten Datei zu speichern, z.B. einer neuen Header Datei `secret.h`
+
+```bash
+$ touch src/secret.h
+$ cat src/secret.h
+#ifndef SECRET_H
+#define SECRET_H
+#define APSSID "Wlan Network Name"
+#define APPSK "Password"
+#endif
+```
+Damit diese Definitionen auch in `src/main.cpp` genutzt werden können muss die
+Header Datei hinzugefügt werden:
+
+```cpp
+...
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
+- #ifndef APSSID
+- #define APSSID "APSSID"
+- #define APPSK  "APPSK"
+- #endif
++ #include "secret.h"
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+...
+
+Das schöne an dieser extra Datei ist die Möglichkeit sie mit in die `.gitignore`
+Datei aufzunehmen, um zu verhindern, dass die WiFi Daten versehentlich in der
+Historie des Repositories auftauchen.
+
+```bash
+echo "src/secret.h" >> .gitignore
+```
+Nun schauen wir den Code in der `loop()` Methode an:
+
+```cpp
+void loop() {
+  // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    WiFiClient client;
+
+    // The line below is optional. It can be used to blink the LED on the board during flashing
+    // The LED will be on during download of one buffer of data from the network. The LED will
+    // be off during writing that buffer to flash
+    // On a good connection the LED should flash regularly. On a bad connection the LED will be
+    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
+    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+
+    // Add optional callback notifiers
+    ESPhttpUpdate.onStart(update_started);
+    ESPhttpUpdate.onEnd(update_finished);
+    ESPhttpUpdate.onProgress(update_progress);
+    ESPhttpUpdate.onError(update_error);
+```
+Wie schon beschrieben registrieren wir hier Funktionen, welche uns ermöglichen
+einzelne Schritte des Update Prozesses mitzuverfolgen und zu Loggen.
+
+```cpp
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "http://server/file.bin");
+    // Or:
+    //t_httpUpdate_return ret = ESPhttpUpdate.update(client, "server", 80, "file.bin");
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
+    }
+  }
+}
+```
+
+Dies ist der interessante Teil. Wir rufend den httpUpdater auf indem wir den
+WiFi Client übergeben, sowie die genaue URL des Update Servers. Tatsächlich
+möchten wir sogar die auskommentierte Methode nutzen, da diese uns erlaubt einen
+anderen Port als 80 anzusprechen. Dies ist nützlich, wenn der Update Server auf
+einen anderen Port hört, gerade auf Geräten die keine Administrationsrechte
+besitzen ist dies oft der Fall, da auf Port 80 hören Administrationsrechte
+benötigt. Dementsprechend ändern wir den Port sowie die Adresse des Servers.
+In unserem Fall möchten wir gleich einen Update Server auf unserem eigenen Rechner
+starten, daher nutzen wir unsere eigen IP-Adresse.
+
+Für Windows
+```cmd
+ipconfig
+...
+IPv4-Adresse  . . . . . . . . . . : 192.168.178.123
+...
+```
+
+Für Linux (und wahrscheinlich auch MacOS)
+```bash
+ip address
+1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
+    ...
+2: enp4s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
+    link/ether 18:c0:4d:a4:69:7c brd ff:ff:ff:ff:ff:ff
+    inet 192.168.178.123/24 brd 192.168.178.255 scope global dynamic noprefixroute enp4s0
+       valid_lft 855349sec preferred_lft 855349sec
+    ...
+```
+
+Unsere Adresse ist also `192.168.178.123`, als Port nehmen wir einfach mal
+`8080`, den Endpunkt an welchen später die Anfrage nach der Update Datei
+gesendet wird lassen wir gleich:
+
+```cpp
+    - t_httpUpdate_return ret = ESPhttpUpdate.update(client, "http://server/file.bin");
+    - // Or:
+    - //t_httpUpdate_return ret = ESPhttpUpdate.update(client, "server", 80, "file.bin");
+    + t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123, 8080, "file.bin");
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
+    }
+  }
+}
+```
+Um einen Update Server zu starten brauchen wir nun ein Update Datei. Hierfür
+nehmen wir das Blink Beispiel welches im Blogpost zu den Entwicklungsumgebungen
+benutzt wurde. Unsere Build Artefakte werden von PlatformIO in den Ordner
+`.pio/build/nodemucv2` gelegt. Arduino nutzt normalerweise ein Temp Verzeichnis,
+in Linux oftmals `/tmp/...`, in Windows vielleicht `%APPDATA%`. Beim Bauen des
+Artefkates loggt die Arduino IDE meines Wissens nach wo das Artefakt gespeichert
+ist. 
+
+Neben dem Artefakt benötigen wir noch einen HTTP Server, für unser Beispiel
+nutzen wir das Python http Modul.
+Wir gehen in den Ordner in dem das Blink Artefakt liegt. In unserem Fall ist das
+der Projekt Ordner aus dem IDE Blog Post. Wir erstellen eine Kopie des
+Artefaktes welches der gewünschten URI entspricht.
+Nun starten wir mit Python einen HTTP
+Server welcher auf die eigen IP und Port 8080 hört.
+
+```bash
+$ cd ${IDE_BLOG_POST}
+$ cd ex_project
+$ ls -la
+.gitignore
+.pio
+include
+lib
+platformio.ini
+src
+test
+$ cd .pio/build/nodemucv2
+$ cp firmware.bin file.bin
+$ python -m http.server --bind 192.168.178.123 8080
+```
+
+Nun hört der Server auf den Port 8080. Wir können lokal ersteinmal testen ob
+der HTTP Server auch so funktioniert wie wir es uns wünschen:
+
+```bash
+$ pwd
+{IDE_BLOG_POST}/ex_project/.pio/build/nodemcuv2
+$ curl 192.168.178.123:8080/file.bin > test.bin
+diff file.bin test.bin 
+
+# Kein Output zeigt dass beide Dateien gleich sind
+$ sha256sum file.bin
+d103291e7b41893d3210435c2f45c5c3e6eee24b167c82d17c9e1259cc88c3ab  file.bin
+$ sha256sum test.bin
+d103291e7b41893d3210435c2f45c5c3e6eee24b167c82d17c9e1259cc88c3ab  test.bin
+# Auch der Hash beider Dateien ist gleich
+```
+
+ACHTUNG: Damit der ESP auch den HTTP Server erreichen kann muss der TCP Port
+8080 in der Firewall des eigenen Rechners offen sein. Je nach Betriebsystem,
+Distribution und Antivirus Programm muss hierfür eine Regel angelegt werden.
+Hier muss ich leider auf Google etc. verweisen.
+
+Nun können wir den ESP mit dem OTA Code flashen. Wir erwarten dass der ESP zu
+Begin sich mit dem WiFi verbindet, kurz wartet, dann unseren HTTP Server
+anfrägt, und das Blink Beispiel ausführt.
+
+Um den ESP zu flashen und hiernach die Logs welche über die serielle
+Schnittstelle geschrieben werden zu lesen:
+
+```bash
+$ pio run --target upload; pio device monitor -b 115200
+λ ~/rclone/dhbw/sem6/project/blog/simple-ota/ota_project_simple/ pio run --target upload ; pio device monitor -b 115200
+Processing nodemcuv2 (platform: espressif8266; board: nodemcuv2; framework: arduino)
+--------------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+...
+RAM:   [===       ]  34.0% (used 27872 bytes from 81920 bytes)
+Flash: [===       ]  28.6% (used 298448 bytes from 1044464 bytes)
+...
+Configuring flash size...
+Compressed 302608 bytes to 220648...
+Writing at 0x00000000... (7 %)
+Writing at 0x00004000... (14 %)
+...
+Writing at 0x00030000... (92 %)
+Writing at 0x00034000... (100 %)
+Wrote 302608 bytes (220648 compressed) at 0x00000000 in 19.4 seconds (effective 125.0 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+============================ [SUCCESS] Took 22.90 seconds ============================
+...
+--- Quit: Ctrl+C | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
+[SETUP] WAIT 3...
+[SETUP] WAIT 2...
+[SETUP] WAIT 1...
+CALLBACK:  HTTP update process started
+CALLBACK:  HTTP update process at 0 of 261488 bytes...
+CALLBACK:  HTTP update process at 0 of 261488 bytes...
+CALLBACK:  HTTP update process at 4096 of 261488 bytes...
+...
+CALLBACK:  HTTP update process at 261488 of 261488 bytes...
+CALLBACK:  HTTP update process finished
+
+ ets Jan  8 2013,rst cause:2, boot mode:(3,6)
+
+load 0x4010f000, len 3584, room 16
+tail 0
+chksum 0xb0
+csum 0xb0
+v2843a5ac
+@cp:0
+ld
+```
+
+Das OTA Update war erfolgreich und der angeschlossene ESP führt nun das Blink
+Beispiel aus. Das Projekt ist [hier](TODO LINK) auf Github zu finden.
+Im nächsten Blog Post schauen wir uns an wie man Updates Signiert um
+sicherzustellen, dass die erhaltenen Updates auch wirklich von uns stammen.

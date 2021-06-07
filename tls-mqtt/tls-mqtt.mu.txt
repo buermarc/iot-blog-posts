@@ -1,0 +1,241 @@
+# Mosquitto MQTT Broker über TLS und Client Authentifikation
+
+In diesem Blogpost geht es um das generieren von Schlüsseln für den MQTT Broker,
+als auch für einzelnen Clients, sowie der Konfiguration des MQTT Brokers.
+Ziel ist es einen MQTT Broker zu erlauben über TLS mit authentifizierten Clients
+zu reden, wobei die Authentifikation über signierte Zertifikate ermöglicht wird.
+
+Hierfür benötigen wir:
+
+- Einen MQTT Broker:
+  
+  Als Basis können wir die Containerfile von Johannes' Blogpost nehmen.
+
+- `openssl` zum generieren der Schlüssel und Zertifikate
+
+- Ein Zertifikate um Server und Client zu signieren:
+   
+  Wir erstellen das Zertifikat einfach selbst.
+
+Wir generieren:
+- CA
+- CA Key
+- Server Key
+- Server Certificate
+- Client Key
+- Client Certificate
+    
+Ein paar Basics die gerne von anderen Lesern korrigiert werden dürfen. Die
+Certificate Authority (CA) ist in unserem Fall ein eigener RSA Key welcher mit
+einem Passwort geschützt ist. Client und Server besitzen eigen RSA Keys
+basierend auf diesen Keys erstellen wir Zertifikats Anfragen welche mit
+Informationen über Client und Server gefüllt sind.
+Solch eine Anfrage beinhaltet den `Common Name` des Anfragenden, was in unserem
+Fall die IP Adresse des Client oder Servers wäre.
+
+Die CA nutzt diese Anfragen um ein Zertifikate für den Server und Client zu
+erstellen. Fragt nun der Client den Server an, so kann der Server sein
+Zertifikat vorzeigen. Da der Client das Zertifikat der CA kennt, kann er
+erkennen ob der Server wirklich ein Zertifikat besitzt, welches von der CA
+erstellt wurde. Des weiteren ist das Zertifikat von dem private Schlüssel des
+Servers abhängig, so dass nur wer den privaten Schlüssel besitzt sich auch als
+richtiger Eigentümer des Zertifikates ausgeben kann.
+
+Bei Ergänzungen, Korrekturen und Verbesserungen gerne kommentieren!
+
+Zu Begin erstellen wir den Key für die CA, wichtig hierbei der `Common Name`
+sollte nicht der gleiche sein wie für einen Client oder Server der eine
+Zertifikatsanfrage an die CA schickt.
+Wir erstellen also den Key, als auch das Zertifikat der CA, geschützt durch ein
+Passwort. (Am besten merkt man sich das Passwort, wir brauchen es später wieder)
+
+```bash
+$ openssl genrsa -des3 -out ca.key 2048
+Generating RSA private key, 2048 bit long modulus (2 primes)
+....+++++
+.........................................+++++
+e is 65537 (0x010001)
+Enter pass phrase for ca.key:
+Verifying - Enter pass phrase for ca.key:
+
+# Generate CA certificate
+$ openssl req -new -x509 -days 1826 -key ca.key -out ca.crt
+
+Enter pass phrase for ca.key:
+You are about to be asked to enter information that will be incorporated
+into your certificate request.
+What you are about to enter is what is called a Distinguished Name or a DN
+There are quite a few fields but you can leave some blank
+For some fields there will be a default value,
+If you enter '.', the field will be left blank.
+-----
+Country Name (2 letter code) [AU]:DE
+State or Province Name (full name) [Some-State]:BW
+Locality Name (eg, city) []:KA
+Organization Name (eg, company) [Internet Widgits Pty Ltd]:iot
+Organizational Unit Name (eg, section) []:iot
+Common Name (e.g. server FQDN or YOUR name) []:mydomainname.xyz
+Email Address []:your@mail.com
+````
+
+Nun erstellen wir den Key für den MQTT Server. Hierbei nutzen wir kein Passwort,
+da scheinbar der Mosquitto Broker ansonsten nicht mit dem Key umgehen kann.
+Zuerst erstellen wir einen neuen Ordner für den Server. Nun generieren wir den
+RSA key. Basierend auopenssl req -new -x509 -days 1826 -key ca.key -out ca.crt
+f diesem Key erstellen wir eine Anfrage für ein Zertifikat.
+Dieses Zertifikat wird dann von der CA ausgestellt. 
+WICHTIG: Wir geben die Information über unseren Server gleich per CLI mit
+anstatt interaktiv alle Informationen einzutippen. Der Common Name ist hierbei
+die IP-Adresse des Computers, auf welcher der Mosquitto Broker laufen wird.
+Beim Erstellen des Zertifikates werden wir nach dem Passwort für den Key der CA
+gefragt.
+
+```bash
+$ mkdir -p server
+$ cd server
+$ openssl genrsa -out server.key 2048
+$ openssl req -new -out 
+$ openssl req \
+    -new \
+    -out server.csr \
+    -key server.key \
+    -subj "/C=DE/ST=BW/L=KA/O=iot/OU=iot/CN=192.168.178.123"
+$ openssl x509 \
+    -req \
+    -in server.csr \
+    -CA ../ca.crt \
+    -CAkey ../ca.key \
+    -CAcreateserial \
+    -out server.crt \
+    -days 360
+```
+
+Das selbe müssen wir nun für den Client machen. Hier jedoch mit anderen Key
+Namen und einem anderen `Common Name`. In unserem Fall verwenden wir die IP
+Adresse des ESPs: "192.168.178.121", diese können wir herausfinden indem wir den
+ESP mit dem lokalen Netzwerk per WiFi verbinden und dann die IP Adresse über den
+seriellen Output loggen. Den Code Snippet welchen wir hierzu einem anderen
+Beispiel hinzugefügt haben ist folgender:
+
+```cpp
+...
+
+Serial.print("IP address: ");
+Serial.println(WiFi.localIP());
+...
+```
+
+Da wir nun die IP Adresse wissen können wir die Keys und das Zertifikat für den
+Client erstellen:
+
+```bash
+$ mkdir -p client
+$ cd client
+$ openssl genrsa -out client.key 2048
+$ openssl req -new -out 
+$ openssl req \
+    -new \
+    -out client.csr \
+    -key client.key \
+    -subj "/C=DE/ST=BW/L=KA/O=iot/OU=iot/CN=192.168.178.121"
+$ openssl x509 \
+    -req \
+    -in client.csr \
+    -CA ../ca.crt \
+    -CAkey ../ca.key \
+    -CAcreateserial \
+    -out client.crt \
+    -days 360
+```
+
+Somit haben wir nun alle Dateien die wir brauchen, der Datei Baum sollte nun
+folgend aussehen:
+```bash
+tree
+.
+├── ca.crt
+├── ca.key
+├── ca.srl
+├── client
+│   ├── client.crt
+│   ├── client.csr
+│   └── client.key
+└── server
+    ├── server.crt
+    ├── server.csr
+    └── server.key
+```
+
+Als nächstes müssen wir daraus die richtige Konfiguration für den MQTT Broker
+erstellen. Dieser benötigt das Zertifikat der CA, das Zertifikat für den Server
+und den privaten Key des Servers. Zudem müssen wir in der Konfigurations
+Datei auf die einzelnen Keys und Zertifikate zeigen. Zudem wollen wir angeben,
+dass wir von unseren Clients auch valide Zertifikate und Keys erwarten.
+Wir erstellen daher einen `config` Ordner, sowie einen `config/ca_certificates` Ordner
+und `config/certs` Ordner. In den `ca_certificates` Ordner kopieren wir das
+Zertifikat der CA und in den `certs` Ordner kommen des Serves privater Key und
+Zertifikat. Zudem erstellen wir die Datei `config/mosquitto.conf` dessen Inhalt
+später gezeigt wird.
+
+```bash
+$ mkdir -p config/ca_certificates
+$ mkdir -p config/certs
+$ cp ./ca.crt ./config/ca_certificates
+$ cp ./server/server.crt ./config/certs
+$ cp ./server/server.key ./config/certs
+$ touch ./config/mosquitto.conf
+$ cat ./config/mosquitto.conf
+listener 8883
+allow_anonymous true
+cafile /mosquitto/config/ca_certificates/ca.crt
+certfile /mosquitto/config/certs/server.crt
+keyfile /mosquitto/config/certs/server.key
+require_certificate true
+```
+
+Diese Konfiguration kann nun in den Container gemounted werden, so dass der
+MQTT Broker Zugriff auf die Datein hat. Hierfür nutzen wir die Commands, welche
+Johannes schon in seinem Blogpost bereitgestellt hat. 
+
+```bash
+$ docker pull eclipse-mosquitto
+$ docker run -it --name mqtt -p 192.168.178.123:8883:8883 -v $(pwd)/config:/mosquitto/config  eclipse-mosquitto
+1623085571: mosquitto version 2.0.10 starting
+1623085571: Config loaded from /mosquitto/config/mosquitto.conf.
+1623085571: Opening ipv4 listen socket on port 8883.
+1623085571: Opening ipv6 listen socket on port 8883.
+1623085571: mosquitto version 2.0.10 running
+```
+
+Mit CTRL-C kann man den laufenden Container beenden, da dieser Container im
+Vordergrund läuft. Dies ist praktisch zum Debuggen, da man die Logausgabe des
+Brokers sieht, jedoch kann man den Container auch detached starten.
+
+```bash
+$ docker container rm mqtt
+$ docker run -d --name mqtt -p 192.168.178.123:8883:8883 -v $(pwd)/config:/mosquitto/config  eclipse-mosquitto
+```
+
+Um diesem als Client auf diesen Broker Nachrichten zu publizieren oder auf ein
+Topic zu subscriben braucht der Client:
+
+- CA Zertifikat
+- Client private Key
+- Client Zertifikat
+
+```
+$ # Wir sind im Ordner welcher den Key und das Zertifikat des Client beinhaltet
+$ mosquitto_sub -h 192.168.178.123 -t test -p 8883 --cafile ../ca.crt --cert client.crt --key client.key
+
+```
+
+```
+$ # Wir sind im Ordner welcher den Key und das Zertifikat des Client beinhaltet
+$ mosquitto_pub -h 192.168.178.123 -t test -p 8883 --cafile ../ca.crt --cert client.crt --key client.key -m "TEST Publish"
+```
+
+Der subscribende Client sollte nun die Nachricht des Publizierenden erhalten.
+Damit haben wir einen MQTT Broker eingerichtet, bei dem alle Beteiligten über
+TLS kommunizieren, und durch eine CA zertifiziert sind. Die Dateien zu diesem
+Blogpost sind [hier](TODO LINK ZU REPO) zu finden.
+

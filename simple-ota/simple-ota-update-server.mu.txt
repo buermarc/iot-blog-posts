@@ -411,6 +411,8 @@ ld
 ```
 
 Das OTA Update war erfolgreich und der angeschlossene ESP führt nun das Blink
-Beispiel aus. Das Projekt ist [hier](TODO LINK) auf Github zu finden.
-Im nächsten Blog Post schauen wir uns an wie man Updates Signiert um
-sicherzustellen, dass die erhaltenen Updates auch wirklich von uns stammen.
+Beispiel aus. Das Projekt ist
+[hier](https://github.com/buermarc/iot-blog-posts/tree/main/simple-ota) auf
+Github zu finden.  Im nächsten Blog Post schauen wir uns an wie man Updates
+Signiert um sicherzustellen, dass die erhaltenen Updates auch wirklich von uns
+stammen.

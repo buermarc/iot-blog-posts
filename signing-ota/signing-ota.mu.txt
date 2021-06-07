@@ -1,0 +1,582 @@
+# OTA Updates mit signierten Update Artefakten
+
+In diesem Beitrag möchten wir uns signierte Updates anschauen. Das heißt, an das
+Artefakt werden extra Information angehängt welches die Validität und den Ursprung
+des Artefaktes darstellt. Hierfür benötigen wir:
+
+- Eine Umgebung für die Arduino Entwicklung: Wir nutzen wieder das PlatformIO
+  CLI Tool
+- Das Beispiel Projekt zum simplen OTA und den dort benutzten Code als Grundlage
+- Ein Schlüsselpaar aus privatem und öffentlichen Schlüssel: Diese generieren
+  wir mit mit `openssl`
+- Ein Tool zum Signieren von gebauten Artefakten: Das bekommen wir vom
+  offiziellen Arduino Repository
+
+Zu Begin erweitern wir das simple OTA Projekt um die Verifizierung einer
+Signatur beim laden von neuen Artefakten vom Update Server.
+In unserem Fall Kopieren wir zu Begin das alte Projekt, wer das alte Projekt
+nicht hat kann auch alternativ ein neues erstellen
+
+```bash
+$ cp -r ota_project_simple ota_project_signing
+$ # Aufgrund meiner Ordnerstruktur schiebe ich das Projekt in den richtigen Überordner
+$ mv ota_project_signing ../signing-ota/
+$ # Ich kopiere außerdem noch meine WiFi Configuration
+$ cp ota_project_simple/src/secret.h ../signing-ota/ota_project_signing/src
+$
+$ # Alternativ kann auch ein neues Projekt erstellt werden
+$ mkdir signing-ota
+$ cd signing-ota
+$ pio init --board nodemcuv2
+```
+
+Nun sollte `src/main.cpp` den Code aus dem letzten Beitrag beinhalten, wenn dies
+nicht der Fall ist kopieren wir ihn einfach hinein:
+
+```cpp  
+/**
+   httpUpdate.ino
+
+    Created on: 27.11.2015
+
+*/
+
+#include <Arduino.h>
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
+#include "secret.h"
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+
+  Serial.begin(115200);
+  // Serial.setDebugOutput(true);
+
+  Serial.println();
+  Serial.println();
+  Serial.println();
+
+  for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(APSSID, APPSK);
+
+
+}
+
+void update_started() {
+  Serial.println("CALLBACK:  HTTP update process started");
+}
+
+void update_finished() {
+  Serial.println("CALLBACK:  HTTP update process finished");
+}
+
+void update_progress(int cur, int total) {
+  Serial.printf("CALLBACK:  HTTP update process at %d of %d bytes...\n", cur, total);
+}
+
+void update_error(int err) {
+  Serial.printf("CALLBACK:  HTTP update fatal error code %d\n", err);
+}
+
+
+void loop() {
+  // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    WiFiClient client;
+
+    // The line below is optional. It can be used to blink the LED on the board during flashing
+    // The LED will be on during download of one buffer of data from the network. The LED will
+    // be off during writing that buffer to flash
+    // On a good connection the LED should flash regularly. On a bad connection the LED will be
+    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
+    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+
+    // Add optional callback notifiers
+    ESPhttpUpdate.onStart(update_started);
+    ESPhttpUpdate.onEnd(update_finished);
+    ESPhttpUpdate.onProgress(update_progress);
+    ESPhttpUpdate.onError(update_error);
+
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "file.bin");
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
+    }
+  }
+}
+```
+
+Bevor wir tatsächlich den Code ̈́ändern schauen wir uns an welche Signatur die
+Arduino Bibliothek erwartet und wie wir diese erstellen können. Das Artefakt
+selbst wird erweitert durch ein SHA256 Hash des eigentlichen Artefakts, welcher
+durch einen RSA Key signiert wird. Letztendlich wird die Länge der Signatur als
+uint32_t, also einem unsigned integer mit der Größe 32 bit, an das Ende gehängt.
+Die finale Datei hat folgendes Layout:
+```
+| Unsigned Plain Artefakt | Signed Hash | uint32_t length |
+``` 
+Das Signieren selbst kann eigentlich die Arduino IDE für uns übernehmen sobald
+wir die benötigten Schlüssel bereitstellen. Da wir allerdings das PlatformIO CLI
+Tool nutzen müssen wir für diese Projekt selbst signieren. 
+(Vielleicht kann das CLI Tool auch Signaturen selbständig erstellen, ich habe
+aber nicht herausgefunden ob und wie)
+
+Die benötigten Schlüssel erstellen wir mit Hilfe von `openssl`.
+Wir erstellen innerhalb des Projekt Verzeichnisses einen neuen Ordner für unsere
+Keys, wechseln in dieses neues Verzeichnis und erstellen die benötigten RSA-2048
+Keys. Eigentlich wären auch RSA-4096 möglich aber hierzu gibt es in einem
+späteren Blogpost noch weiter Informationen.
+
+```bash
+$ tree
+.
+├── include
+│   └── README
+├── lib
+│   └── README
+├── platformio.ini
+├── src
+│   ├── main.cpp
+│   └── secret.h
+├── test
+│   └── README
+└── update_server.sh
+$ mkdir keys
+$ cd keys
+$ openssl genrsa -out private.key 2048
+$ openssl rsa -in private.key -outform PEM -pubout -out public.key
+$ ls
+private.key
+public.key
+```
+
+Als nächstes laden wir das Signier-Tool herunter welches wir in einem neuen
+`tool` Ordner abspeichern. Des weiteren erstellen wir ein Makefile, welches
+es uns vereinfacht Artefakte direkt nach dem Bau zu signieren.
+
+```bash
+$ tree
+.
+├── include
+│   └── README
+├── keys
+│   ├── private.key
+│   └── public.key
+├── lib
+│   └── README
+├── platformio.ini
+├── src
+│   ├── main.cpp
+│   └── secret.h
+├── test
+│   └── README
+└── update_server.sh
+$ mkdir tools 
+$ curl https://raw.githubusercontent.com/esp8266/Arduino/master/tools/signing.py > tools/signing.py
+$ touch Makefile
+$ # Füllen des Makefiles, s.t.
+$ cat Makefile
+all:
+        pio run
+        python tools/signing.py --mode sign \
+            --publickey keys/public.key \
+            --privatekey keys/private.key \
+            --bin ./.pio/build/nodemcuv2/firmware.bin \
+            --out ./.pio/build/nodemcuv2/firmware.bin.signed
+```
+
+Wenn nun `make` auf der Kommandozeile ausgeführt wird, baut das Artefakt und
+wird im Nachhinein mit den soeben erstellen Schlüsseln signiert. Beim Erstellen
+des Makefiles muss man aufpassen. Makefiles sind sehr anfällig für falsch
+gesetzte Leerzeichen. Nach dem Ziel `all:` müssen die gewünschten Kommandos
+einen Abstand von 8 Leerzeichen haben, zudem müssen multiline Kommandos mit dem
+Zeichen `\` ausgeschrieben werden, wobei nach dem `\` kein Leerzeichen mehr
+stehen darf.
+
+Somit haben wir nun die Möglichkeit unsere Artefakte zu Signieren. Nun müssen
+wir noch den Code anpassen, so dass auch überprüft wird ob das gesendete
+Artefakt valide ist. Der Code braucht dabei unseren Public Key, denn bei
+asynchroner Kryptographie kann eine Nachricht mit dem privaten Key signiert
+werden und später mit einem öffentlichem Schlüssel verifiziert werden.
+Wenn wir gleich den Code betrachten sehen wir des weiteren ein paar Präprozessor
+Statements wie `if MANUAL_SIGNING`, diese werden benötigt wenn die Arduino IDE
+den Code von sich selbst aus signiert, dann wird unserer Zusatz nicht mit in das
+wirklichen kompilierte Artefakt eingebunden, da die Arduino IDE dies schon von
+sich aus macht. Da wir allerdings das PlatformIO CLI Tool nutzen setzen wir die
+einfach `MANUAL_SIGNING` auf 1. 
+
+Der erste Teil den wir hinzufügen ist eine Präprozessor Definition, unser
+öffentlicher Schlüssel, und ein paar Deklarationen die wir später noch nutzen:
+
+- ein Objekt für den öffentlichen Schlüssel
+- ein Objekt für einen SHA256 Hash
+- ein Objekt für das verifizieren der Signatur
+
+```cpp
+...
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
+#include "secret.h"
+
++ #define MANUAL_SIGNING 1
++ 
++ const char pubkey[] PROGMEM = R"EOF(
++ -----BEGIN PUBLIC KEY-----
++ MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArSf4W99aciiCoDH427w5
++ FE95jL7R/2tC4pYOyZWq3yTVl0Kq6y33L9GgLS6kCILLBi0KSGykOQX3kEzOnZa2
++ nesjLZXwTxWeRlq1f0OcRMXXNjbVg+kDepKoinW3ch1fD29sLpzUgtNwIt7fAahe
++ eZGIsytNMnLPRUf0mjKbWe9xgyT88EETPLzsJ9Lw+CJUBxxenmzh5XbU8H/VwUJq
++ Kjd2ta8jnK6htBPPMvdYpTpCqE+QY4Tp8VmKv2hnCrb8XlIyEfD5y+y5qrIF4Bg1
++ vRKQD82QmNZon2ASuqPUz45ZQwVqTQSt8Pg4QI7sViO5LTmJuqAAQecHVEZ8ae3J
++ BwIDAQAB
++ -----END PUBLIC KEY-----
++ )EOF";
++ #if MANUAL_SIGNING
++ BearSSL::PublicKey *signPubKey = nullptr;
++ BearSSL::HashSHA256 *hash;
++ BearSSL::SigningVerifier *sign;
++ #endif
+
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+...
+```
+
+Dies Objekte nutzen wir später in der setup Methode um beim späteren Update die
+Signatur des Artefaktes mit Hilfe unseres öffentlichen Schlüssels auch
+überprüfen zu können.
+
+```cpp
+...
+  for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(APSSID, APPSK);
+
+  + #if MANUAL_SIGNING
+  + signPubKey = new BearSSL::PublicKey(pubkey);
+  + hash = new BearSSL::HashSHA256();
+  + sign = new BearSSL::SigningVerifier(signPubKey);
+  + #endif
+
+}
+...
+```
+
+Nun müssen wir zu aller letzt dem Updater signalisieren dass wir die Signatur
+überprüfen möchten. Zudem ändern wir die URL welche der Updater anfragt, sodass
+das signierte Artefakt geladen wird.
+
+```cpp
+...
+void loop() {
+  // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    WiFiClient client;
+
+    + #if MANUAL_SIGNING
+    + // Ensure all updates are signed appropriately.  W/o this call, all will be accepted.
+    + Update.installSignature(hash, sign);
+    + #endif
+... ACHTUNG
+    - t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "file.bin");
+    + t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "firmware.bin.signed");
+...
+```
+
+Somit wird der ESP8266 jedes neue Artefakt auf eine valide Signatur überprüfen.
+Um dies auszuprobieren müssen wir nun diesen Code flashen und einen Update
+Server bereitstellen mit einem valide signierten Artefakt. Daher kümmern wir uns
+ersteinmal um das valide signierte Artefakt. Als Beispiel Artefakt nutzen wir
+wieder das Blink Beispiel aus dem Blog Beitrag zu den Entwicklungsumgebungen. Um
+dies zu Signieren kopieren wir unser erstelltes Makefile in den Ordner in
+welchem wir den Code zum Blink Beispiel haben, sowie den Ordner `./tools` in
+welchem das Signier-Tool liegt und `./keys` in welchem unsere Schlüssel liegen.
+Danach gehen wir in den root Ordner des Projektes, führen `make` aus und starten
+wieder einen HTTP Server.
+
+```bash
+$ cp Makefile ../../ide/ex_project
+$ cp -r tools  ../../ide/ex_project
+$ cp -r keys  ../../ide/ex_project
+$ cd ../../ide/ex_project
+$ python -m http.server --directory ./.pio/build/nodemcuv2/ --bind 192.168.178.123 8080
+```
+
+Um den HTTP Server zu testen könnten wir wieder mit `curl` eine GET Anfrage
+schicken und mit `diff` oder `sha256sum` überprüfen ob wir die richtige Datei
+erhalten. Falls etwas nicht funktioniert ist dies immer ein guter Anhaltspunkt
+um mögliche Fehler auszuschliessen.
+
+Während der Update Server nun läuft können wir zurück in das ursprüngliche
+Projekt gehen welches die signierten Artefakte beinhaltet, und mit PlatformIO
+den Code kompilieren und flashen. Wir erwarten nun, dass wie beim einfachen OTA
+Beispiel der Updater zuerst wartet und dann eine Anfrage an unseren Update
+Server stellt. Die erhaltene Datei wird dann überprüft, sollte als gültig
+empfunden werden und mit einem Neustart des Mikrocontrollers ausgeführt werden.
+
+WICHTIG: Der HTTP Server muss auch von außen erreichbare sein d.h. der TCP Port
+8080 muss geöffnet sein.
+
+```bash
+$ cd ${OTA_PROJECT_SIGNING}
+$ pio run --target upload; pio device monitor -b 115200
+Processing nodemcuv2 (platform: espressif8266; board: nodemcuv2; framework: arduino)
+-----------------------------------------------------------------------------------------------------------------------
+...
+RAM:   [===       ]  34.3% (used 28072 bytes from 81920 bytes)
+Flash: [===       ]  32.1% (used 335628 bytes from 1044464 bytes)
+..
+Writing at 0x00000000... (6 %)
+...
+Writing at 0x0003c000... (100 %)
+Wrote 339776 bytes (249783 compressed) at 0x00000000 in 21.9 seconds (effective 123.9 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+============================================ [SUCCESS] Took 25.55 seconds ============================================
+...
+[SETUP] WAIT 3...
+[SETUP] WAIT 2...
+[SETUP] WAIT 1...
+CALLBACK:  HTTP update process started
+CALLBACK:  HTTP update process at 0 of 261748 bytes..
+...
+CALLBACK:  HTTP update process at 261748 of 261748 bytes...
+CALLBACK:  HTTP update process finished
+
+ ets Jan  8 2013,rst cause:2, boot mode:(3,6)
+
+load 0x4010f000, len 3584, room 16
+tail 0
+chksum 0xb0
+csum 0xb0
+v2843a5ac
+@cp:0
+ld
+```
+
+Wie man in dem Abschnitt aus dem gekürzten Log Output sieht war das Update
+erfolgreich. Aber um sicher zu gehen, dass ein unsigniertes Update oder eine
+invalide Signatur nicht funktioniert sollten wir noch überprüfen ob das Update
+fehlschlägt, wenn wir ein invalides Artefakt bereitstellen.
+Hierfür können wir im Build Ordner des Blink Projektes zum einen die unsignierte
+Version umbenennen, so dass der HTTP Server dies zurück gibt.
+
+```bash
+$ cd ${EX_PROJECT}
+$ cd .pio/build/nodemcuv2
+$ cp firmware.bin firmware.bin.signed
+$ cd ${OTA_PROJECT_SIGNING}
+$ pio run --target upload; pio device monitor -b 115200
+...
+HTTP_UPDATE_FAILD Error (12): Update error: ERROR[12]: Signature verification failed
+...
+```
+Unsignierte Artefakte werden also nicht mehr akzeptiert. Unser momentaner Code
+würde nach dem fehlgeschlagenen Update einfach wieder probieren zu updaten. Das
+ist im Betrieb nicht gewünscht aber hier als Proof of Concept können wir das
+vorerst so lassen. Was wir allerdings noch überprüfen können wäre eine invalide
+Signatur.
+Um ein Artefakt mit invalider Signatur zu erhalten könnten wir entweder ein
+neues Schlüsselpaar erstellen und hiermit signieren oder das bestehende Artefakt
+verändern. Da wir wissen wo die Signatur zu finden ist nehmen wir den zweiteren
+Weg. Zu Begin erstellen wir wieder ein valide signiertes Artefakt und wechseln
+in den Build Ordner.
+
+```bash
+$ cd ${ex_project}
+$ make
+$ cd .pio/build/nodemcuv2
+```
+
+Nun müssen wir die Signatur verändern, das Problem ist allerdings, dass das
+Artefakt in binärer Form vorhanden ist. Wir wollen nun an der Stelle an welcher
+die Signatur ist die Datei ändern.
+Zur Erinnerung hier das Layout:
+```
+| Unsigned Plain Artefakt | Signed Hash | uint32_t length |
+``` 
+Um auch wirklich zu zeigen dass die Signatur nur minimal geändert werden muss um
+ein invalides Artefakt zu erhalten wollen wir nun nur ein Byte des Artefaktes
+ändern. Theoretisch gesehen ist es egal wo wir das Byte ändern da entweder die
+Signatur invalide wird, die Länge der Signatur nicht mehr stimmt, oder der
+SHA256 Hash sich unterscheidet.
+
+Um ein Byte zu ändern öffnen wir das Artefakt mit VIM.
+WICHTIG: Die Datei mit der Flagge `-b` öffnen, ansonsten erwartet VIM UTF-8
+encoding anstatt eine binäre Datei, hierdurch würde das Umwandeln in HEX nicht
+richtig funktionieren.
+
+```bash
+$ vim -b firmware.bin.signed
+```
+```
+
+1   <e9>^A^B@\<f4>^P@^@<f0>^P@^@^N^@^@^@^P<ff>?^@ <ff>?^@^P^@^@^\K^@@^P^P^@^@<cc>$^@@^H
+    ^P^@^@^@^@<f0><bf><ff>^?^@^@^@^@^@<c0><ff><ff><ff>^_<f0><ff><ff>?<ff>^O^@^@^@<f0><f
+    f><ff><98><f0>^P@^@<80><fe>?^@<80>^@^@^@^@<ff>?^@J^@@<a8><de>^@@LJ^@@^@^G^@`^@^@^@<
+    80><e8>+^@@<f0>0^@@<a0>/^@@<b7>^]<c1>^D^@^R^@`^@<ee><ff><9f><80>^R^@`^@^P^@<eb>|^R^
+    @`<88><dc>^@@" <ff>?^D <ff>?6 <ff>?r <ff>?<90> <ff>?^R<c1><f0>1<d9><ff>     1<c9>!<
+    d9>^Q<cd>^B<d1><d7><ff>9^B!<d6><ff>A<d6><ff>)^\"-^@^A<d5><ff><c0>^@^@(^M^H1"<d2>^P)
+    ^M(^L<d8>^Q^[29^L"^B^@<c8>!^R<c1>^P^M<f0>^@1<ce><ff>^R<c1><e0>:"^LD<8b>1<c9>a q^A<c
+    9><ff><c0>^@^@<cd>^B<fc>^B"<a0>v"A^@,R"A^A<^B"A^B<<82>"A^C"<a0>x"A^D8!^L<a2>"A^E^P!
+     <c2>A^F^A<be><ff><c0>^@^@<86>^@^@^@^L^\^Hq-^L<c8>a^R<c1> ^M<f0>^@^@^@^R<c1><e0><d9
+    >Q<8b>1<dd>^B^L<84>"<d2>^P   q<c2>a^F<e2>a^D^A<b0><ff><c0>^@^@V<e2>^F1<b1><ff><cd>^
+    B:<dd><ed>^B^F^T^@^@-^M=^A^L<84><e9>^A<e9>^Q^A<a8><ff><c0>^@^@<fc>^BA<aa><ff>8^A<8b
+ NORMAL  firmware.bin.signed                        unix | utf-8 | no ft    0%    1:1
+```
+
+Wie wir sehen ist die Datei voller unverständlicher Zeichen, wenn wir hier etwas
+ändern kann es sein, dass mehr oder weniger als ein Byte geändert wird. Daher
+nutzen wir `xxd` um die Datei in Hexadezimalen angezeigt zu bekommen. 
+Wir tippen in VIM:
+
+```
+:%!xxd
+```
+```
+
+00000000: e901 0240 5cf4 1040 00f0 1040 000e 0000  ...@\..@...@....
+00000010: 0010 ff3f 0020 ff3f 0010 0000 1c4b 0040  ...?. .?.....K.@
+00000020: 1010 0000 cc24 0040 0810 0000 0000 f0bf  .....$.@........
+00000030: ff7f 0000 0000 00c0 ffff ff1f f0ff ff3f  ...............?
+00000040: ff0f 0000 00f0 ffff 98f0 1040 0080 fe3f  ...........@...?
+00000050: 0080 0000 0000 ff3f 004a 0040 a8de 0040  .......?.J.@...@
+00000060: 4c4a 0040 0007 0060 0000 0080 e82b 0040  LJ.@...`.....+.@
+00000070: f030 0040 a02f 0040 b71d c104 0012 0060  .0.@./.@.......`
+00000080: 00ee ff9f 8012 0060 0010 00eb 7c12 0060  .......`....|..`
+00000090: 88dc 0040 2220 ff3f 0420 ff3f 3620 ff3f  ...@" .?. .?6 .?
+000000a0: 7220 ff3f 9020 ff3f 12c1 f031 d9ff 0931  r .?. .?...1...1
+000000b0: c921 d911 cd02 d1d7 ff39 0221 d6ff 41d6  .!.......9.!..A.
+000000c0: ff29 1c22 2d00 01d5 ffc0 0000 280d 0831  .)."-.......(..1
+000000d0: 22d2 1029 0d28 0cd8 111b 3239 0c22 0200  "..).(....29."..
+000000e0: c821 12c1 100d f000 31ce ff12 c1e0 3a22  .!......1.....:"
+000000f0: 0c44 8b31 c961 0971 01c9 ffc0 0000 cd02  .D.1.a.q........
+00000100: fc02 22a0 7622 4100 2c52 2241 013c 0222  ..".v"A.,R"A.<."
+...
+```
+
+Nun gehen wir an das Ende der Datei durch das Drücken der Taste `G`.
+
+```
+...
+0003fdd0: 4afb 82d9 76c5 206b 985f 801b cdd5 f4e1  J...v. k._......
+0003fde0: 42c2 2e32 fcf1 bb99 8125 7112 a577 88cd  B..2.....%q..w..
+0003fdf0: 40b3 4de4 ae68 8c11 902a 552b bd86 94a0  @.M..h...*U+....
+0003fe00: 5b57 c34b cd19 7d7e 9e41 e7e6 3e2b 0e7c  [W.K..}~.A..>+.|
+0003fe10: 1116 4711 7094 27f6 4162 0d7c 60d3 c951  ..G.p.'.Ab.|`..Q
+0003fe20: bfb5 b043 57f4 f943 53b4 4f3c dfc8 c250  ...CW..CS.O<...P
+0003fe30: e746 00c6 419a 42a8 05f5 0f25 5049 556a  .F..A.B....%PIUj
+0003fe40: 612a f185 b242 9407 2de9 bec2 0e86 f7f5  a*...B..-.......
+0003fe50: 195d f87a 321b e15e 6fff 3d16 582d cb03  .].z2..^o.=.X-..
+0003fe60: 6664 01bb 55b7 6f52 20ce 04e0 d28f eee8  fd..U.oR .......
+0003fe70: 0001 0000                                ....
+          ^^^^ ^^^^ 
+```
+
+Um nun die Signatur zu finden müssen wir die Länge eines uint32_t wissen.  Diese
+ist 32 Bit also 8 Bytes. Ein Hexadezimale Tuple z.B. `fd` ist ein Byte.  
+Zudem wissen wir, dass die Länge ganz am Ende der Datei ist.
+D.h.
+`0001 0000` ist die Länge der Signatur als uint32_t.  Daher ist der Block zuvor
+die Signatur, welche mit RSA-2048 in diesem Fall eine Länge von 256 Bytes haben
+müsste.
+
+Nun ändern wir einfach nur ein Byte der Signatur ab, z.B. das erste Byte in der
+Vorletzten Zeile `6`, welches wir in `7` abändern.
+
+```
+...
+0003fdd0: 4afb 82d9 76c5 206b 985f 801b cdd5 f4e1  J...v. k._......
+0003fde0: 42c2 2e32 fcf1 bb99 8125 7112 a577 88cd  B..2.....%q..w..
+0003fdf0: 40b3 4de4 ae68 8c11 902a 552b bd86 94a0  @.M..h...*U+....
+0003fe00: 5b57 c34b cd19 7d7e 9e41 e7e6 3e2b 0e7c  [W.K..}~.A..>+.|
+0003fe10: 1116 4711 7094 27f6 4162 0d7c 60d3 c951  ..G.p.'.Ab.|`..Q
+0003fe20: bfb5 b043 57f4 f943 53b4 4f3c dfc8 c250  ...CW..CS.O<...P
+0003fe30: e746 00c6 419a 42a8 05f5 0f25 5049 556a  .F..A.B....%PIUj
+0003fe40: 612a f185 b242 9407 2de9 bec2 0e86 f7f5  a*...B..-.......
+0003fe50: 195d f87a 321b e15e 6fff 3d16 582d cb03  .].z2..^o.=.X-..
+0003fe60: 7664 01bb 55b7 6f52 20ce 04e0 d28f eee8  fd..U.oR .......   <--- Hier
+          ^
+0003fe70: 0001 0000                                .... 
+```
+
+Nun wechseln wir von der Hexadezimal Ansicht wieder in die Binär Ansicht und
+speichern das Artefakt.
+In VIM tippe:
+
+```
+:%!xxd -r
+:wq
+```
+
+Wir können das geänderte Artefakt zusätzlich noch mit der Kopie eines validen
+Artefaktes vergleichen mit Hilfe von `diff` oder `sha256sum`. Somit könnte man
+sichergehen, dass die Artefakte sich tatsächlich unterscheiden. Gleichzeitig
+können wir überprüfen, ob die Dateien gleichgroß sind.
+
+```bash
+$ cd ${EX_PROJECT}
+$ cd .pio/build/nodemcuv2
+$ cp firmware.bin.signed invalid.bin.signed
+$ make -C ../../..
+$ diff firmware.bin.signed invalid.bin.signed
+Binary files firmware.bin.signed and invalid.bin.signed differ
+$ du -b firmware.bin.signed
+261748  firmware.bin.signed
+$ du -b invalid.bin.signed
+261748  invalid.bin.signed
+```
+
+Nun flashen wir den ESP wieder mit dem Code welcher ein valide signiertes
+Artefakt erwartet.
+
+```bash
+$ cd ${OTA_PROJECT_SIGNING}
+$ pio run --target upload; pio device monitor -b 115200
+...
+HTTP_UPDATE_FAILD Error (12): Update error: ERROR[12]: Signature verification failed
+...
+```
+
+Und auch hier ist das Update wie gewünscht nicht erfolgreich. Somit haben wir
+nun OTA Updates die sicher nur dann erfolgreich sind, wenn unser Artefakt mit
+dem von uns erstellten privaten Schlüssel signiert ist. Der private Schlüssel
+sollte daher nicht in die Versions Kontrolle mit eingecheckt werden.  Generell
+sollte für die Produktion nicht die gleichen Schlüssel wie für den eigentlichen
+Betrieb genutzt werden. Das schützt den laufende Betrieb und verhindert böse
+Missgeschicke.

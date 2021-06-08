@@ -41,8 +41,7 @@ Momentan nutzen wir das Arduino "Framework" zum Programmieren des ESP8266. Mit
 dessen Hilfe können wir bequem alle benötigten Sensoren auslesen, sowie auch
 eine MQTT Verbindung aufbauen. Wie in der
 [Dokumentation](https://arduino-esp8266.readthedocs.io/en/latest/ota_updates/readme.html#http-server)
-beschrieben wird OTA
-unterstützt.
+beschrieben werden OTA Updates auch unterstützt.
 
 
 Das Arduino Framework bietet verschiedene OTA Möglichkeiten:
@@ -50,11 +49,11 @@ Das Arduino Framework bietet verschiedene OTA Möglichkeiten:
 - OTA mit der Arduino IDE
 
     Normalerweise wird der ESP per Serial Port (ESP und Computer sind per USB
-    verbunden)  mit der Applikation bespielt (geflasht). Wobei die Applikation
-    hierbei in kompilierter Form als binäre Datei vorliegt. Diese Art der OTA
-    Updates benötigt eine geöffnete Arduino IDE in welcher per Hand anstatt des
-    Serial Ports ein Netzwerk Port ausgewählt wird. => Nicht wirklich
-    automatisierbar.
+    verbunden)  mit der Applikation bespielt (geflasht). Die Applikation liegt
+    hierbei in kompilierter Form als binäre Datei vor. Ein OTA Update per
+    Arduino IDE Updates benötigt eine geöffnete Arduino IDE, in welcher per Hand
+    anstatt des Serial Ports ein Netzwerk Port ausgewählt wird. => Nicht
+    wirklich automatisierbar.
 
 - OTA über den Webbrowser
     
@@ -77,9 +76,9 @@ dass ein Update notwendig ist.
 | ESP8266  | <---------------- | Update  | | durch 
 +----------+                   | Server  | | Balena
     |                          +---------+ \ Cloud
-    | Trigger  +---------+
-    | Update   |  MQTT   |
-    +--------- | Broker  |
+    | Trigger  +---------+          |
+    | Update   |  MQTT   |          |
+    +--------- | Broker  |----------+
                +---------+
 ```
 
@@ -94,7 +93,7 @@ Hierbei sind allerdings einige Sicherheitsaspekte zu beachten:
   vertrauenswürdig ist.
 
 - Die binäre Form sollte eine valide Signatur beinhalten, welche versichert dass
-  dieses Update aus unserer Herkunft entspringt. Dies sollte verhindern das
+  dieses Update unserer Herkunft entspringt. Dies sollte verhindern das
   fremder, möglicherweise, böswilliger Code auf dem Mikrocontroller ausgeführt
   wird.
 

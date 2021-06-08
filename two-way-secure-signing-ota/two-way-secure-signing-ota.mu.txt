@@ -1,0 +1,34 @@
+# Update Sicherheit: Verifizierte ESP Clients
+
+Stand jetzt ist die Kommunikation zwischen ESP und Update Server verschlüsselt
+und das Auslesen von Paketen um unser Update Artefakt zu erhalten ist nicht mehr
+möglich. Gleichzeitig können wir dank der Signatur des Artefaktes sicher sein,
+dass wir nur unseren und keinen fremden böswilligen Code ausführen. Allerdings
+führen wir keinerlei Client Authentifikation durch, d.h. ein fremder Client
+könnte unseren Update Server Anfragen und würde unser Update Artefakt einfach
+zugesendet bekommen. Um dies zu verhindern nehmen wir uns ein Beispiel am MQTT
+Broker bei welchem wir in einem früheren Blogbeitrag schon Client
+Authentifikation durch signierte Zertifikate konfiguriert hatten.
+
+Der Update Server sollte nur Anfragen bedienen welche ein gültiges Zertifikat
+haben und nachweisen können, dass sie Besitzer dieses Zertifikat sind. Dies
+heißt ein jeder ESP braucht einen private Key, sowie ein Zertifikat welches von
+unserer CA ausgestellt wurde. Wir müssen nun also:
+
+- Es müssen Client Zertifikate erstellt werden:
+  
+  Wir können als Proof-Of-Concept wiedereinmal die Keys und Zertifikate aus dem
+  MQTT Blogbeitrag nutzen.
+
+- Der Update Server muss abgeändert werden, so dass alle Anfragen validiert
+  werden:
+
+  NodeJS in Verbindung mit ExpressJS und dem HTTPS Modul macht uns das ziemlich
+  einfach.
+
+- Der ESP braucht sowohl privaten Client Key, als auch das Zertifikat. Beides
+  muss bei einer Anfrage nutzbar sein:
+
+  Wie schon das validieren des Update Server durch das Einbinden des CA
+  Zertifikat, nutzen wir hier wieder den SecureWiFiClient, welcher passende
+  Methoden bereitstellt.

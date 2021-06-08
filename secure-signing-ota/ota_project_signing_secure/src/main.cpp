@@ -42,9 +42,7 @@ BearSSL::SigningVerifier *sign;
 #include <CertStoreBearSSL.h>
 BearSSL::CertStore certStore;
 
-#include <base64.h>
-
-const String version = "VERSION_0.0.1";
+ESP8266WiFiMulti WiFiMulti;
 
 void setClock() {
   configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC
@@ -65,7 +63,6 @@ void setClock() {
   Serial.print(asctime(&timeinfo));
 }
 
-ESP8266WiFiMulti WiFiMulti;
 
 void setup() {
 
@@ -135,7 +132,7 @@ void loop() {
     }
     client.setCertStore(&certStore);
 
-    Serial.print("Local WiFi: ");
+    Serial.print("Local WiFi");
     Serial.println(WiFi.localIP());
 
     #if MANUAL_SIGNING
@@ -158,8 +155,6 @@ void loop() {
     ESPhttpUpdate.onProgress(update_progress);
     ESPhttpUpdate.onError(update_error);
 
-    String header = base64::encode(version + "::" + SECRET);
-    //t_httpUpdate_return ret = ESPhttpUpdate.update(client, "https://192.168.178.123/firmware.bin.signed", );
     t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "/firmware.bin.signed");
 
     switch (ret) {

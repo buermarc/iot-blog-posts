@@ -1,0 +1,661 @@
+# Signierte und verschlüsselte OTA Updates via TLS 
+
+In diesem Blogbeitrag beschäftigen wir uns mit dem verschlüsselten Übertragen
+von Update Dateien. Dies ist wünschenswert, da in den momentanen Dateien
+Informationen wie Anmeldedaten für das lokale Netzwerk, als auch Adressen von
+weiteren Server beinhaltet ist (Update Server, später auch MQTT Server).
+Um dies zu erreichen brauchen wir:
+
+- Einen TLS fähigen HTTP Server als Update Server: 
+  
+  Hierfür nutzen wir NodeJS, eine andere Möglichkeit wäre bspw. ein nginx
+  Webserver, usw.
+
+- Wieder ein paar Zertifikate und Keys:
+
+  Hier können wir vorerst Zertifikate und Keys aus dem MQTT Blogbeitrag nutzen.
+  Wie diese erstellt werden, wird in dem anderen Beitrag beschrieben.
+
+- Angepasste Logik auf dem Mikrocontroller, welche überprüft ob der Update
+  Server ein valides Zertifikat hat und mit diesem nur verschlüsselt
+  kommuniziert:
+
+  Um eine sichere Anfrage zu stellen müssen wir die Verschlüsselung nicht selbst
+  implementieren, aber es bedarf dennoch einiger Erweiterungen, um
+  beispielsweise das Zertifikat der CA (Certificate Authority) dem WiFi Client
+  zu übergeben. Zusätzlich zum signierte OTA Update müssen wir vor dem Flashen:
+    * Ein LittleFS Dateisystem mit dem Zertifikat der CA erstellen
+    * Das Dateisystem auf den ESP laden
+
+  Zur Laufzeit:
+    * Die Zertifikate aus dem Dateisystem laden
+    * Die lokale Zeit setzen
+    * Einen WiFiClient erstellen welcher HTTPS unterstützt
+    * Eine update Anfrage stellen
+    
+Zu Begin kümmern wir uns schnell um einen Update Server welcher TLS unterstützt.
+Wir haben uns vorerst für einen Server basierend auf NodeJS in Kombination mit
+ExpressJS entschieden. Andere Sprachen und Frameworks, oder etablierte HTTP
+Server wie nginx, oder der Apache HTTP Server wären auch möglich. Der Vorteil
+von NodeJS ist das simple Aufsetzen und hoffentlich das einfache verpacken in
+einen Container.
+
+Hierfür brauchen wir zum einen, `NodeJS` als auch den Node Packet Manager `npm`.
+Wir erstellen einen neuen Ordner `update_server_tls` in welchem wir das Projekt
+mit `npm init` initialisieren und geben `npm` ein paar Infos über unser Projekt.
+
+```bash
+$ mkdir update_server_tls
+$ npm init
+This utility will walk you through creating a package.json file.
+It only covers the most common items, and tries to guess sensible defaults.
+
+See `npm help init` for definitive documentation on these fields
+and exactly what they do.
+
+Use `npm install <pkg>` afterwards to install a package and
+save it as a dependency in the package.json file.
+
+Press ^C at any time to quit.
+package name: (update_server_tls)
+version: (1.0.0)
+description:
+entry point: (index.js) server.js
+test command:
+git repository:
+keywords:
+author:
+license: (ISC)
+About to write to .../update_server_tls/package.json:
+
+{
+  "name": "update_server_tls",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "ISC"
+}
+
+Is this OK? (yes)
+```
+
+Nun erstellen wir die `server.js` Datei in welchem der Code für unseren Update
+Server liegen wird. Zu Begin importieren wir benötigte Module. Diese müssen
+später noch installiert werden. Im weiteren Code erstellen wir zum einen den
+https Server, welche das Zertifikat der CA, sowie Server Key und Zertifikat
+einliest. Key und Zertifikat lade ich aus dem Ordner in welchem die Dateien aus
+dem MQTT Blogbeitrag liegen. Des weiteren müssen wir noch die Logik angeben
+welche auf die GET Anfrage des ESPs reagiert. Hier wird dann die gewünschte
+Update Datei gelesen und zurück gegeben.
+
+```bash
+$ touch server.js
+$ cat server.js
+```
+```javascript
+const fs = require('fs');
+const https = require('https');
+const express = require('express');
+const path = require('path');
+
+const app = express();
+
+var PORT = 8080;
+  
+// Without middleware
+app.get('/firmware.bin.signed', function(_req, res, next){
+    var options = {
+        root: path.join(__dirname)
+    };
+      
+    var fileName = 'firmware.bin.signed';
+
+    res.sendFile(fileName, options, function (err) {
+        if (err) {
+            next(err);
+        } else {
+            console.log('Sent:', fileName);
+        }
+    });
+});
+  
+https
+  .createServer(
+    {
+      // ...
+      cert: fs.readFileSync('../../tls-mqtt/server/server.crt'),
+      key: fs.readFileSync('../../tls-mqtt/server/server.key'),
+      // ...
+    },
+    app
+  )
+  .listen(PORT);
+```
+
+Nun installieren wir benötigte Module, und erstellen noch ein Script innerhalb 
+der 'package.json' Datei (`"start": "node server.js"`) um dann mit `npm start`
+den Update Server starten zu können.
+
+``` bash
+$ npm install fs
+$ npm install https
+$ npm install express
+$ npm install path
+$ cat package.json
+{
+  "name": "update_server_tls",
+  "version": "1.0.0",
+  "description": "",
+  "main": "server.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.17.1",
+    "fs": "^0.0.1-security",
+    "https": "^1.0.0",
+    "path": "^0.12.7"
+  }
+}
+```
+
+Damit der Server auch die Datei auf Anfrage senden kann muss der Pfad zur Datei
+stimmen. Momentan erwarten der Server die Datei unter dem Pfad
+'./firmware.bin.signed`. Damit diese auch von hier geladen werden kann sollten
+wir sie dort platzieren. Ich nutze wieder das Blink Beispiel welches wir im
+Beitrag zu signierten Updates schon signiert haben. Dieses kopiere ich vom Build
+Ordner in den Ordner welcher den Update Server beinhaltet.
+
+```bash
+$ # Gehe in das Projekt Verzeichnis mit dem Blink Code
+$ cd ${EX_PROJECT}
+$ # Baue das Artefakt und nutze unser Makefile aus dem Blogbeitrag um das Artefakt zu signieren
+$ make 
+$ # Kopieren des Artefaktes in den Update Server Ordner
+$ cp ${EX_PROJECT}/.pio/build/nodemcuv2/firmware.bin.signed ${UPDATE_SERVER_TLS}/firmware.bin.signed
+$ cd ${UPDATE_SERVER_TLS}
+$ ls
+firmware.bin.signed
+node_modules
+package-lock.json
+package.json
+server.js
+```
+
+Um den Update Server zu testen können wir in einmal ausführen und mit `curl`
+anfragen. Wir starten den Server mit `npm start` und in einem anderen
+Terminal rufen wir `curl` auf.
+
+```bash
+$ cd ${UPDATE_SERVER_TLS}
+$ npm start
+---
+$ cd ${UPDATE_SERVER_TLS}
+$ # Wir nutzen nun https
+$ curl https://192.168.178.123:8080 --cacert ../../tls-mqtt/ca.crt > test.bin.signed
+$ diff firmware.bin.signed  test.bin.signed
+$ # Versuchen wir über http anzufragen
+$ curl http://192.168.178.123:8080 --cacert ../../tls-mqtt/ca.crt > should-be-empty.txt
+$ cat should-be-empty.txt
+$ du -b should-be-empty.txt
+0       should-be-empty.txt
+```
+
+Damit haben wir nun ein funktionierender Update Server, welcher uns die
+signierte Update Datei nur über HTTPS gibt.
+
+Nun müssen wir den OTA Update Code auf dem ESP abändern, als Vorlage können wir
+den Code aus dem signierten OTA Update Beispiel nehmen. Daher erstellen wir ein
+neues PlatformIO Projekt für das nodemcuv2 Board. In dieses Projekt kopieren wir
+den Code des alten Projektes.
+
+```bash
+$ mkdir -p ota_project_signing_secure
+$ cd ota_project_signing_secure
+$ pio init --board nodemcuv2
+$ cp ${OTA_PROJECT_SIGNING}/src/main.cpp ./src/main.cpp
+$ cat src/main.cpp
+/**
+   httpUpdate.ino
+
+    Created on: 27.11.2015
+
+*/
+
+#include <Arduino.h>
+
+#include <ESP8266WiFi.h>
+#include <ESP8266WiFiMulti.h>
+
+#include <ESP8266HTTPClient.h>
+#include <ESP8266httpUpdate.h>
+
+#include "secret.h"
+
+#define MANUAL_SIGNING 1
+
+const char pubkey[] PROGMEM = R"EOF(
+-----BEGIN PUBLIC KEY-----
+MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArSf4W99aciiCoDH427w5
+FE95jL7R/2tC4pYOyZWq3yTVl0Kq6y33L9GgLS6kCILLBi0KSGykOQX3kEzOnZa2
+nesjLZXwTxWeRlq1f0OcRMXXNjbVg+kDepKoinW3ch1fD29sLpzUgtNwIt7fAahe
+eZGIsytNMnLPRUf0mjKbWe9xgyT88EETPLzsJ9Lw+CJUBxxenmzh5XbU8H/VwUJq
+Kjd2ta8jnK6htBPPMvdYpTpCqE+QY4Tp8VmKv2hnCrb8XlIyEfD5y+y5qrIF4Bg1
+vRKQD82QmNZon2ASuqPUz45ZQwVqTQSt8Pg4QI7sViO5LTmJuqAAQecHVEZ8ae3J
+BwIDAQAB
+-----END PUBLIC KEY-----
+)EOF";
+#if MANUAL_SIGNING
+BearSSL::PublicKey *signPubKey = nullptr;
+BearSSL::HashSHA256 *hash;
+BearSSL::SigningVerifier *sign;
+#endif
+
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+
+  Serial.begin(115200);
+  // Serial.setDebugOutput(true);
+
+  Serial.println();
+  Serial.println();
+  Serial.println();
+
+  for (uint8_t t = 4; t > 0; t--) {
+    Serial.printf("[SETUP] WAIT %d...\n", t);
+    Serial.flush();
+    delay(1000);
+  }
+
+  WiFi.mode(WIFI_STA);
+  WiFiMulti.addAP(APSSID, APPSK);
+
+  #if MANUAL_SIGNING
+  signPubKey = new BearSSL::PublicKey(pubkey);
+  hash = new BearSSL::HashSHA256();
+  sign = new BearSSL::SigningVerifier(signPubKey);
+  #endif
+}
+
+void update_started() {
+  Serial.println("CALLBACK:  HTTP update process started");
+}
+
+void update_finished() {
+  Serial.println("CALLBACK:  HTTP update process finished");
+}
+
+void update_progress(int cur, int total) {
+  Serial.printf("CALLBACK:  HTTP update process at %d of %d bytes...\n", cur, total);
+}
+
+void update_error(int err) {
+  Serial.printf("CALLBACK:  HTTP update fatal error code %d\n", err);
+}
+
+
+void loop() {
+  // wait for WiFi connection
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    WiFiClient client;
+
+    Serial.print("Local WiFi");
+    Serial.println(WiFi.localIP());
+
+    #if MANUAL_SIGNING
+    // Ensure all updates are signed appropriately.  W/o this call, all will be accepted.
+    Update.installSignature(hash, sign);
+    #endif
+
+
+    // The line below is optional. It can be used to blink the LED on the board during flashing
+    // The LED will be on during download of one buffer of data from the network. The LED will
+    // be off during writing that buffer to flash
+    // On a good connection the LED should flash regularly. On a bad connection the LED will be
+    // on much longer than it will be off. Other pins than LED_BUILTIN may be used. The second
+    // value is used to put the LED on. If the LED is on with HIGH, that value should be passed
+    ESPhttpUpdate.setLedPin(LED_BUILTIN, LOW);
+
+    // Add optional callback notifiers
+    ESPhttpUpdate.onStart(update_started);
+    ESPhttpUpdate.onEnd(update_finished);
+    ESPhttpUpdate.onProgress(update_progress);
+    ESPhttpUpdate.onError(update_error);
+
+    t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "firmware.bin.signed");
+
+    switch (ret) {
+      case HTTP_UPDATE_FAILED:
+        Serial.printf("HTTP_UPDATE_FAILD Error (%d): %s\n", ESPhttpUpdate.getLastError(), ESPhttpUpdate.getLastErrorString().c_str());
+        break;
+
+      case HTTP_UPDATE_NO_UPDATES:
+        Serial.println("HTTP_UPDATE_NO_UPDATES");
+        break;
+
+      case HTTP_UPDATE_OK:
+        Serial.println("HTTP_UPDATE_OK");
+        break;
+    }
+  }
+}
+```
+
+Wir wiederholen nochmal was wir erreichen müssen um solche verschlüsselte
+Updates auch auf Seiten des ESPs zu unterstützen:
+
+- Vor dem Flashen:
+    * Ein LittleFS Dateisystem mit dem Zertifikat der CA erstellen
+    * Das Dateisystem auf den ESP laden
+- Zur Laufzeit:
+    * Die Zertifikate aus dem Dateisystem laden
+    * Die lokale Zeit setzen
+    * Einen WiFiClient erstellen welcher HTTPS unterstützt
+    * Eine update Anfrage stellen
+
+Um ein LittleFS Dateisystem zu erstellen müssen wir innerhalb des root
+Verzeichnisses des PlatformIO Projektes einen `data` Ordner erstellen und diesen
+mit den gewünschten Inhalten des Dateisystems füllen. Weiter müssen wir klar
+darstellen, dass wir ein LittleFS Dateisystem erstellen möchten.
+
+```bash
+$ mkdir data
+$ echo "This is a file that should be available on the ESP" > data/hello.txt
+# Achtung doppelte >>, da nur ein > die Datei überschreiben würde
+$ echo "board_build.filesystem = littlefs" >> platform.ini
+$ cat platfrom.ini
+; PlatformIO Project Configuration File
+;
+;   Build options: build flags, source filter
+;   Upload options: custom upload port, speed and extra flags
+;   Library options: dependencies, extra library storages
+;   Advanced options: extra scripting
+;
+; Please visit documentation for the other options and examples
+; https://docs.platformio.org/page/projectconf.html
+
+[env:nodemcuv2]
+platform = espressif8266
+board = nodemcuv2
+framework = arduino
+board_build.filesystem = littlefs
+```
+
+Nun müssen wir allerdings auch unser Zertifikat in das Dateisystem kopieren und
+nicht nur irgendeine Textdatei. Hierfür erstellen wir aus dem Zertifikat der CA
+welches wir aus dem TLS-MQTT Beitrag haben und wandeln dieses in das DER Format
+um. Diese neue Datei legen wir dann in das `data` Verzeichnis. 
+
+```bash
+$ tree
+.
+├── data
+│   └── hello.txt
+├── include
+│   └── README
+├── lib
+│   └── README
+├── platformio.ini
+├── src
+│   └── main.cpp
+└── test
+    └── README
+
+5 directories, 6 files
+$ cp ../../tls-mqtt/ca.crt ./data/ca.crt
+$ cd data
+$ openssl x509 -outform der -in ca.crt -out our_ca_cert.der
+$ # Der Code erwartet später ein Verzeichnis vieler Zertifikate Namen 'certs.ar`
+$ ar q certs.ar our_ca_cert.der
+$ # Die Dateien die wir nicht mehr benötigen können wir löschen.
+$ rm ca.crt our_ca_cert.der
+```
+
+Mit `pio run --target uploadfs` können wir später das Dateisystem auf den ESP
+flashen. Jedoch wollen wir zuvor ersteinmal die fehlenden Logik dem ESP Code
+hinzufügen.
+
+Nun möchten wir das Zertifikat vom Dateisystem laden und damit die relevanten
+Objekte füllen. Hierfür erweitern wir das Setup. Dies bedarf auch neuer Imports
+sowie Deklaration eines Zertifikatespeicher. Im Setup stellen wir dann sicher,
+dass das Dateisystem gemounted und verfügbar ist mit `LittleFS.begin()`, danach
+laden wir die `certs.ar` Datei in den Zertifikatespeicher.
+
+```cpp
+...
+#if MANUAL_SIGNING
+BearSSL::PublicKey *signPubKey = nullptr;
+BearSSL::HashSHA256 *hash;
+BearSSL::SigningVerifier *sign;
+#endif
+
+#include <time.h>
+
++ #include <FS.h>
++ #include <LittleFS.h>
++ 
++ #include <CertStoreBearSSL.h>
++ BearSSL::CertStore certStore;
+
+ESP8266WiFiMulti WiFiMulti;
+
+void setup() {
+...
+  #if MANUAL_SIGNING
+  signPubKey = new BearSSL::PublicKey(pubkey);
+  hash = new BearSSL::HashSHA256();
+  sign = new BearSSL::SigningVerifier(signPubKey);
+  #endif
++
+  + LittleFS.begin();
++
+  + Serial.print("Exists"); 
+  + Serial.println(LittleFS.exists("/certs.ar"));
+  + int numCerts = certStore.initCertStore(LittleFS, PSTR("/certs.idx"), PSTR("/certs.ar"));
+  + Serial.print(F("Number of CA certs read: "));
+  + Serial.println(numCerts);
+  + if (numCerts == 0) {
+  +   Serial.println(F("No certs found. Did you run certs-from-mozill.py and upload the LittleFS directory before running?"));
+  +   return; // Can't connect to anything w/o certs!
+  + }
+}
+...
+```
+
+Um eine valide HTTPS GET Anfrage zu stellen brauchen wir noch die lokale Zeit,
+bzw. eine ungefähre Zeit. Hierfür definieren wir eine neue Funktion welche die
+aktuelle Zeit setzt.
+
+```cpp
+#if MANUAL_SIGNING
+BearSSL::PublicKey *signPubKey = nullptr;
+BearSSL::HashSHA256 *hash;
+BearSSL::SigningVerifier *sign;
+#endif
+
++ #include <time.h>
+
+#include <FS.h>
+#include <LittleFS.h>
+...
+#include <CertStoreBearSSL.h>
+BearSSL::CertStore certStore;
+
+ESP8266WiFiMulti WiFiMulti;
+
++ void setClock() {
++   configTime(0, 0, "pool.ntp.org", "time.nist.gov");  // UTC
++ 
++   Serial.print(F("Waiting for NTP time sync: "));
++   time_t now = time(nullptr);
++   while (now < 8 * 3600 * 2) {
++     yield();
++     delay(500);
++     Serial.print(F("."));
++     now = time(nullptr);
++   }
++ 
++   Serial.println(F(""));
++   struct tm timeinfo;
++   gmtime_r(&now, &timeinfo);
++   Serial.print(F("Current time: "));
++   Serial.print(asctime(&timeinfo));
++ }
++ 
+
+void setup() {
+
+```
+
+Damit haben wir die Möglichkeit kurz vor dem Stellen der Anfrage die Zeit zu
+setzen. Sehr wahrscheinlich stimmt unsere Zeitzone nicht, aber das sollte kein
+Problem sein, die ungefähre Zeit sollte reichen. Das Setzen der Zeit,
+Registrieren der Zertifikate sowie das Stellen der Anfrage zeigen wir nun in
+einer letzten Änderung des Codes.
+
+```cpp
+  if ((WiFiMulti.run() == WL_CONNECTED)) {
+
+    - WiFiClient client;
+    + setClock();
+
+    + BearSSL::WiFiClientSecure client;
+    + bool mfln = client.probeMaxFragmentLength("server", 443, 1024);  // server must be the same as in ESPhttpUpdate.update()
+    + Serial.printf("MFLN supported: %s\n", mfln ? "yes" : "no");
+    + if (mfln) {
+    +   client.setBufferSizes(1024, 1024);
+    + }
+    + client.setCertStore(&certStore);
+
+    Serial.print("Local WiFi ");
+    Serial.println(WiFi.localIP());
+
+    #if MANUAL_SIGNING
+    // Ensure all updates are signed appropriately.  W/o this call, all will be accepted.
+    Update.installSignature(hash, sign);
+    #endif
+    ...
+    // ACHTUNG
+        - t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "firmware.bin.signed");
+        + t_httpUpdate_return ret = ESPhttpUpdate.update(client, "192.168.178.123", 8080, "/firmware.bin.signed");
+```
+
+Somit sollte es nun möglich sein ein signiertes Update verschlüsselt vom Update
+Server anzufragen und zu übertragen. Der eigentliche Methoden Aufruf zum starten
+des Updates ändert sich leicht, denn wir haben den normalen WiFiClient mit einem
+WiFiClientSecure ausgetauscht. Zudem erwartet der NodeJS HTTP Server das wir
+`/firmware.bin.signed` anfragen, weswegen wir dies explizit als Zieladresse der
+Updater Funktion übergeben.  Um dies nun zu testen, kompilieren wir und flashen
+den ESP. Wichtig hierbei wie immer, der Update Server muss von außen erreichbar
+sein, d.h. in unserem Fall muss der TCP Port 8080 in der lokalen Firewall des
+Computers geöffnet sein.
+
+```bash
+$ cd ${OTA_PROJECT_SIGNING_SECURE}
+$ pio run --target uploadfs
+$ pio run --target upload; pio device monitor -b 115200
+Processing nodemcuv2 (platform: espressif8266; board: nodemcuv2; framework: arduino)
+-----------------------------------------------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+...
+Building file system image from 'data' directory to .pio/build/nodemcuv2/littlefs.bin
+/certs.ar
+/hello.txt
+Looking for upload port...
+Auto-detected: /dev/ttyUSB0
+Uploading .pio/build/nodemcuv2/littlefs.bin
+esptool.py v3.0
+Serial port /dev/ttyUSB0
+Connecting....
+...
+Writing at 0x00300000... (100 %)
+Wrote 1024000 bytes (2279 compressed) at 0x00300000 in 0.2 seconds (effective 40397.7 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+============================================= [SUCCESS] Took 7.53 seconds =============================================
+
+
+$ pio run --target upload; pio device monitor -b 115200
+Processing nodemcuv2 (platform: espressif8266; board: nodemcuv2; framework: arduino)
+-----------------------------------------------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+..
+Writing at 0x00050000... (100 %)
+Wrote 448640 bytes (328103 compressed) at 0x00000000 in 28.9 seconds (effective 124.1 kbit/s)...
+Hash of data verified.
+
+Leaving...
+Hard resetting via RTS pin...
+============================================ [SUCCESS] Took 33.09 seconds ============================================
+--- Available filters and text transformations: colorize, debug, default, direct, esp8266_exception_decoder, hexlify, log2file, nocontrol, printable, send_on_enter, time
+--- More details at http://bit.ly/pio-monitor-filters
+--- Miniterm on /dev/ttyUSB0  115200,8,N,1 ---
+--- Quit: Ctrl+C | Menu: Ctrl+T | Help: Ctrl+T followed by Ctrl+H ---
+[SETUP] WAIT 3...
+[SETUP] WAIT 2...
+[SETUP] WAIT 1...
+Exists1
+Number of CA certs read: 1
+Waiting for NTP time sync:
+Current time: Tue Jun  8 16:06:57 2021
+MFLN supported: no
+Local WiFi192.168.178.121
+CALLBACK:  HTTP update process started
+CALLBACK:  HTTP update process at 0 of 261748 bytes...
+CALLBACK:  HTTP update process at 4096 of 261748 bytes...
+...
+CALLBACK:  HTTP update process at 261748 of 261748 bytes...
+CALLBACK:  HTTP update process finished
+
+ ets Jan  8 2013,rst cause:2, boot mode:(3,6)
+
+load 0x4010f000, len 3584, room 16
+tail 0
+chksum 0xb0
+csum 0xb0
+v2843a5ac
+@cp:0
+ld
+```
+
+Und tatsächlich das Updaten funktioniert. Um nun sicher zu gehen, dass der ESP
+auch wirklich nur noch von einem HTTPS Server Updates annimmt beenden wir den
+HTTPS Update Server und starten wieder einen python HTTP Server.
+
+```bash
+$ # Drücken von CTRL+C im Terminal des Update Server sollte diesen beenden
+$ cd ${UPDATE_SERVER_TLS}
+$ python -m http.server --directory ./ --bind 192.168.178.123 8080
+$ cd ${OTA_PROJECT_SIGNING_SECURE}
+$ pio run --target upload; pio device monitor -b 115200
+...
+HTTP_UPDATE_FAILD Error (-1): HTTP error: connection failed
+...
+```
+
+Das Update schlägt fehl und der Python HTTP Server beschwert sich auch:
+
+```bash
+Serving HTTP on 192.168.178.123 port 8080 (http://192.168.178.123:8080/) ...
+192.168.178.121 - - [08/Jun/2021 18:15:29] code 400, message Bad request version ('À\x13À')
+192.168.178.121 - - [08/Jun/2021 18:15:29] "×ÓÐc¤xBvº¬âx1g Æ!@¶ZÌ©Ì¨À+À/À,À0À¬À­À®À¯À#À'À$À(À    ÀÀ" 400 -
+```
+
+Somit haben wir nun signierte Updates über eine sichere verschlüsselte
+Verbindung. Im nächsten Blogbeitrag möchten wir nun auch den Clients eigene
+Zertifikat und Keys geben um sichergehen zu können, dass nur ESPs welche von uns
+zertifizierte Zertifikate haben auch die Update Datei erhalten. Wie immer gibt
+es den erstellten Code und alle andere Dateien [hier](TODO LINK GITHUB) auf
+Github.

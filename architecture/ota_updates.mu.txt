@@ -1,8 +1,8 @@
-# OTA Updates für den ESP8266
+# Over-The-Air Updates für den ESP8266
 
 In diesem Blogeintrag möchten wir gerne ein Überblick über den momentanen Stand
 der Update Funktion unserer Mikrocontroller geben. Die technischen Details gibt
-es in weiteren Beiträgen, hier gibt es erstmal eine Architektur Übersicht und
+es in weiteren Beiträgen, hier gibt es erst einmal eine Architektur Übersicht und
 ein bisschen Background um Gründe, und Herangehensweise zu verstehen.
 
 Für unser Projekt brauchen wir verschiedene Sensoren, welche an einen ESP8266

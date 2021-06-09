@@ -320,7 +320,7 @@ Server welcher auf die eigen IP und Port 8080 hört.
 
 ```bash
 $ cd ${IDE_BLOG_POST}
-$ cd ex_project
+$ cd blink_example
 $ ls -la
 .gitignore
 .pio
@@ -339,7 +339,7 @@ der HTTP Server auch so funktioniert wie wir es uns wünschen:
 
 ```bash
 $ pwd
-{IDE_BLOG_POST}/ex_project/.pio/build/nodemcuv2
+{IDE_BLOG_POST}/blink_example/.pio/build/nodemcuv2
 $ curl 192.168.178.123:8080/file.bin > test.bin
 diff file.bin test.bin 
 

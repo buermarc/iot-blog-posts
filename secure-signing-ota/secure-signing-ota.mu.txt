@@ -175,11 +175,11 @@ Ordner in den Ordner welcher den Update Server beinhaltet.
 
 ```bash
 $ # Gehe in das Projekt Verzeichnis mit dem Blink Code
-$ cd ${EX_PROJECT}
+$ cd ${BLINK_EXAMPLE}
 $ # Baue das Artefakt und nutze unser Makefile aus dem Blogbeitrag um das Artefakt zu signieren
 $ make 
 $ # Kopieren des Artefaktes in den Update Server Ordner
-$ cp ${EX_PROJECT}/.pio/build/nodemcuv2/firmware.bin.signed ${UPDATE_SERVER_TLS}/firmware.bin.signed
+$ cp ${BLINK_EXAMPLE}/.pio/build/nodemcuv2/firmware.bin.signed ${UPDATE_SERVER_TLS}/firmware.bin.signed
 $ cd ${UPDATE_SERVER_TLS}
 $ ls
 firmware.bin.signed
@@ -657,5 +657,6 @@ Somit haben wir nun signierte Updates über eine sichere verschlüsselte
 Verbindung. Im nächsten Blogbeitrag möchten wir nun auch den Clients eigene
 Zertifikat und Keys geben um sichergehen zu können, dass nur ESPs welche von uns
 zertifizierte Zertifikate haben auch die Update Datei erhalten. Wie immer gibt
-es den erstellten Code und alle andere Dateien [hier](TODO LINK GITHUB) auf
-Github.
+es den erstellten Code und alle andere Dateien
+[hier](https://github.com/buermarc/iot-blog-posts/tree/main/secure-signing-ota)
+auf Github.

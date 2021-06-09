@@ -1,9 +1,11 @@
+# Aufsetzen verschiedener Entwicklungsumgebungen für den ESP8266
+
 In diesem Beitrag schauen wir uns verschieden Entwicklungsumgebungen für den
 ESP8266 in Verbindung mit dem Arduino Framework an. 
 Ziel des Posts ist zu zeigen wie mit zwei verschiedenen
 Entwicklungsumgebung/Tools ein Programm für den ESP8266 kompiliert und auf den
 Mikrocontroller geladen werden kann. 
-Diese Entwicklungsumgebungen brauchen wir in späteren Blog Posts, in welchen wir
+Diese Entwicklungsumgebungen brauchen wir in späteren Blogbeiträgen, in welchen wir
 eine Applikation entwerfend möchten welche Over-The-Air Updates erlaubt.
 
 Wir behandeln im folgenden zum einen die Arduino IDE als auch das PlatformIO CLI
@@ -86,15 +88,15 @@ Folgend die Commands um ein Projekt für den ESP8266 beispielsweise zu erstellen
 #### Erstellen eines neuen Ordners für das Projekt:
 
 ```bash
-$ mkdir ex_project
-$ cd ex_project
+$ mkdir blink_example
+$ cd blink_example
 ```
 
 #### Initialisieren des Projektes:
 ```bash
 $ pio project init --board nodemcuv2
 $ tree
-ex_project
+blink_example
 ├── include
 │  └── README
 ├── lib
@@ -116,7 +118,7 @@ Um Logik zu erstellen muss die Datei src/main.cpp erstellt und gefüllt werden.
 Ein Beispiels welches die LED des ESP8266 blinken lässt sieht folgend aus.
 
 ```bash
-ex_project
+blink_example
 ├── include
 │  └── README
 ├── lib
@@ -227,7 +229,7 @@ hat ein Tutorial zum Installieren und Anwenden des LittleFS Tools.
 
 Das gewünschte Filesystem muss definiert sein, wie in der
 [Dokumentation](https://docs.platformio.org/en/latest/platforms/espressif8266.html#selecting-appropriate-filesystem)
-beschrieben Falls kein genaues Dateisystem definiert ist wird ein SPIFFS
+beschrieben. Falls kein genaues Dateisystem definiert ist wird ein SPIFFS
 Dateisystem erstellt.
 
 ```bash

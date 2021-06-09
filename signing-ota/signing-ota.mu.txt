@@ -328,10 +328,10 @@ Danach gehen wir in den root Ordner des Projektes, führen `make` aus und starte
 wieder einen HTTP Server.
 
 ```bash
-$ cp Makefile ../../ide/ex_project
-$ cp -r tools  ../../ide/ex_project
-$ cp -r keys  ../../ide/ex_project
-$ cd ../../ide/ex_project
+$ cp Makefile ../../ide/blink_example
+$ cp -r tools  ../../ide/blink_example
+$ cp -r keys  ../../ide/blink_example
+$ cd ../../ide/blink_example
 $ python -m http.server --directory ./.pio/build/nodemcuv2/ --bind 192.168.178.123 8080
 ```
 
@@ -397,7 +397,7 @@ Hierfür können wir im Build Ordner des Blink Projektes zum einen die unsignier
 Version umbenennen, so dass der HTTP Server dies zurück gibt.
 
 ```bash
-$ cd ${EX_PROJECT}
+$ cd ${BLINK_EXAMPLE}
 $ cd .pio/build/nodemcuv2
 $ cp firmware.bin firmware.bin.signed
 $ cd ${OTA_PROJECT_SIGNING}
@@ -418,7 +418,7 @@ Weg. Zu Begin erstellen wir wieder ein valide signiertes Artefakt und wechseln
 in den Build Ordner.
 
 ```bash
-$ cd ${ex_project}
+$ cd ${blink_example}
 $ make
 $ cd .pio/build/nodemcuv2
 ```
@@ -550,7 +550,7 @@ sichergehen, dass die Artefakte sich tatsächlich unterscheiden. Gleichzeitig
 können wir überprüfen, ob die Dateien gleichgroß sind.
 
 ```bash
-$ cd ${EX_PROJECT}
+$ cd ${BLINK_EXAMPLE}
 $ cd .pio/build/nodemcuv2
 $ cp firmware.bin.signed invalid.bin.signed
 $ make -C ../../..

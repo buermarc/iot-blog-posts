@@ -21,8 +21,6 @@ Website heruntergeladen werden.
 
 Je nach Linux Distribution ist die Arduino IDE vielleicht als ein Paket per
 Packet Manager zu erhalten.
-Distributionen, die auf Archlinux basieren brauchen zum `arduino` Packet
-zusätzlich das Paket `arduino-avr-core`
 
 - [Windows](https://www.arduino.cc/en/guide/windows)
 - [macOSX](https://www.arduino.cc/en/guide/macOSX)

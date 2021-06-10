@@ -1,21 +1,21 @@
 # Over the Air Updates - ein simples Beispiel
 
-In diesem Beitrag zeigen wir ein einfaches Over-The-Air Beispiel ohne
-Verschlüsselung und Signatur.
+In diesem Beitrag zeigen wir wie ein einfaches Over-The-Air Beispiel für den
+ESP8266 ohne Verschlüsselung und ohne Signatur realisiert werden kann.
 
 Voraussetzung sind ein ESP8266 sowie eine Entwicklungsumgebung. In diesem
 Beispiel nutzen wir das PlatformIO CLI Tool, die Arduino IDE kann jedoch analog
 hierzu benutzt werden.
 
-Ziel ist es einen ESP über eine Netzwerkverbindung zu updaten. Hierfür benötigen
-wir zum einen entsprechende Logik auf dem ESP, als auch einen HTTP Server
-welcher das Update in binärer Form bereitstellt. In vorherigen Block Posts haben
-wir gezeigt, dass das Update eigentlich durch ein Event getriggert werden soll.
-In diesem Beispiel konzentrieren wir uns aber nur auf den OTA Aspekt und
-lassen dieses Event weg. Das Update soll hiernach einfach durch das Ablaufen
-eines Timers getriggert werden.
+Ziel ist es die laufende Logik eines ESPs über eine Netzwerkverbindung zu
+ändern. Hierfür benötigen wir zum einen entsprechende Logik auf dem ESP, als
+auch einen HTTP Server welcher das Update in binärer Form bereitstellt. In
+vorherigen Block Posts haben wir gezeigt, dass das Update eigentlich durch ein
+Event getriggert werden soll.  In diesem Beispiel konzentrieren wir uns aber nur
+auf den OTA Aspekt und lassen dieses Event weg. Das Update soll hiernach einfach
+durch das Ablaufen eines Timers getriggert werden.
 
-Zu Begin initialisieren wir das Projekt das PlatformIO CLI und erstellen eine
+Zu Begin initialisieren wir das Projekt mit der PlatformIO CLI und erstellen eine
 Datei, welche später unseren Code beinhaltet.
 
 ```bash
@@ -25,10 +25,10 @@ $ pio init --board nodemucv2
 $ touch src/main.cpp
 ```
 
-Als nächstes können wir eine Beispiel aus dem Arduino Repository nutzen um ein
-OTA Update zu testen. Beispiel Code finden wir in den [Beispielen für die
-HttpUpdate
-Komponente](https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266httpUpdate/examples/httpUpdate/httpUpdate.ino).
+Wir nutzen eine Beispiel aus dem Arduino Repository um ein OTA Update zu testen.
+Eine Code Vorlage finden wir in den [Beispielen für die HttpUpdate
+Komponente](https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266httpUpdate/examples/httpUpdate/httpUpdate.ino)
+im Arduino Repository für den ESP8266.
 
 ```cpp
 /**

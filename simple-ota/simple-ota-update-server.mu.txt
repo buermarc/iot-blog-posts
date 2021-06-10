@@ -1,6 +1,6 @@
-# Over the Air Updates - ein simples Beispiel
+# Over-the-Air Updates - ein simples Beispiel
 
-In diesem Beitrag zeigen wir wie ein einfaches Over-The-Air Beispiel für den
+In diesem Beitrag zeigen wir wie ein einfaches Over-The-Air (OTA) Beispiel für den
 ESP8266 ohne Verschlüsselung und ohne Signatur realisiert werden kann.
 
 Voraussetzung sind ein ESP8266 sowie eine Entwicklungsumgebung. In diesem
@@ -9,13 +9,13 @@ hierzu benutzt werden.
 
 Ziel ist es die laufende Logik eines ESPs über eine Netzwerkverbindung zu
 ändern. Hierfür benötigen wir zum einen entsprechende Logik auf dem ESP, als
-auch einen HTTP Server welcher das Update in binärer Form bereitstellt. In
-vorherigen Block Posts haben wir gezeigt, dass das Update eigentlich durch ein
+auch einen HTTP Server, welcher das Update in binärer Form bereitstellt. In
+vorherigen Blockbeitrag haben wir gezeigt, dass das Update eigentlich durch ein
 Event getriggert werden soll.  In diesem Beispiel konzentrieren wir uns aber nur
 auf den OTA Aspekt und lassen dieses Event weg. Das Update soll hiernach einfach
 durch das Ablaufen eines Timers getriggert werden.
 
-Zu Begin initialisieren wir das Projekt mit der PlatformIO CLI und erstellen eine
+Zu Beginn initialisieren wir das Projekt mit der PlatformIO CLI und erstellen eine
 Datei, welche später unseren Code beinhaltet.
 
 ```bash
@@ -25,7 +25,7 @@ $ pio init --board nodemucv2
 $ touch src/main.cpp
 ```
 
-Wir nutzen eine Beispiel aus dem Arduino Repository um ein OTA Update zu testen.
+Wir nutzen ein Beispiel aus dem Arduino Repository, um ein OTA Update zu testen.
 Eine Code Vorlage finden wir in den [Beispielen für die HttpUpdate
 Komponente](https://github.com/esp8266/Arduino/blob/master/libraries/ESP8266httpUpdate/examples/httpUpdate/httpUpdate.ino)
 im Arduino Repository für den ESP8266.
@@ -132,7 +132,7 @@ void loop() {
 }
 ```
 
-Die Callback Funktionen welche uns über den Stand des Updates informieren sind
+Die Callback Funktionen, welche uns über den Stand des Updates informieren sind
 vorerst nicht wichtig, können aber z.B. später im Betrieb genutzt werden um
 zu Loggen, das ein ESP gerade ein Update startet bzw. beendet.
 
@@ -157,16 +157,13 @@ void update_error(int err) {
 }
 ```
 
-ACHTUNG: In diesem Beispiel lassen wir aber ersteinmal alles so wie es ist, und
-loggen alles mit der Serial.print Funktion. Damit das OTA Update funktioniert
+ACHTUNG: In diesem Beispiel lassen wir aber erst einmal alles so wie es ist, und
+loggen alles mit der `Serial.print` Funktion. Damit das OTA Update funktioniert
 müssen wir noch valide WiFi Daten hinterlegen. Wir halten uns an ihre Vorgabe
 mit Präprozessor Definitionen allerdings lagern wir diese in eine andere Datei
 um. Für das aktive Entwickeln in einem Repository bietet es sich an
 solche Informationen in einer separaten Datei zu speichern, z.B. einer neuen
-Header Datei `secret.h`. Deise kann dann in eine `.gitignore` Datei beigefügt
-werden um zu verhindern dass die WiFi Daten mit im der Versionsverwaltung
-landen. TIPP: Auch an die `.gitignore` Datei denken ansonsten hilft das ganze
-nur wenig.
+Header Datei `secret.h`.
 
 
 ```bash
@@ -197,13 +194,15 @@ ESP8266WiFiMulti WiFiMulti;
 void setup() {
 ...
 
-Das schöne an dieser extra Datei ist die Möglichkeit sie mit in die `.gitignore`
+Das Schöne an dieser extra Datei ist die Möglichkeit sie mit in die `.gitignore`
 Datei aufzunehmen, um zu verhindern, dass die WiFi Daten versehentlich in der
-Historie des Repositories auftauchen.
+Historie des Repositories auftauchen. TIPP: Auch an die `.gitignore` Datei
+denken ansonsten hilft das ganze nur wenig.
 
 ```bash
 echo "src/secret.h" >> .gitignore
 ```
+
 Nun schauen wir den Code in der `loop()` Methode an:
 
 ```cpp
@@ -252,25 +251,26 @@ einzelne Schritte des Update Prozesses mitzuverfolgen und zu Loggen.
 }
 ```
 
-Dies ist der interessante Teil. Wir rufend den httpUpdater auf indem wir den
-WiFi Client übergeben, sowie die genaue URL des Update Servers. Tatsächlich
-möchten wir sogar die auskommentierte Methode nutzen, da diese uns erlaubt einen
-anderen Port als 80 anzusprechen. Dies ist nützlich, wenn der Update Server auf
-einen anderen Port hört, gerade auf Geräten die keine Administrationsrechte
-besitzen ist dies oft der Fall, da auf Port 80 hören Administrationsrechte
-benötigt. Dementsprechend ändern wir den Port sowie die Adresse des Servers.
-In unserem Fall möchten wir gleich einen Update Server auf unserem eigenen Rechner
-starten, daher nutzen wir unsere eigen IP-Adresse.
+Dies ist der letzte benötigte Code-Teil. Wir rufend den httpUpdater auf, indem
+wir den WiFi Client übergeben, sowie die genaue URL des Update Servers.
+Tatsächlich möchten wir sogar die auskommentierte Methode nutzen, da diese uns
+erlaubt einen anderen Port als 80 anzusprechen. Dies ist nützlich, wenn der
+Update Server auf einen anderen Port nutzt. Gerade auf Geräten, die keine
+Administrationsrechte besitzen ist dies oft der Fall, da das Nutzen von Port 80
+Administrationsrechte benötigt. Dementsprechend ändern wir den Port, sowie die
+Adresse des Servers.  In unserem Fall möchten wir gleich einen Update Server auf
+unserem eigenen Rechner starten, daher nutzen wir unsere eigen IP-Adresse.
 
 Für Windows
 ```cmd
 ipconfig
 ...
 IPv4-Adresse  . . . . . . . . . . : 192.168.178.123
+                                    ^^^^^^^^^^^^^^^
 ...
 ```
 
-Für Linux (und wahrscheinlich auch MacOS)
+Für Linux (und vlt. auch MacOS)
 ```bash
 ip address
 1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1000
@@ -278,13 +278,14 @@ ip address
 2: enp4s0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc fq_codel state UP group default qlen 1000
     link/ether 18:c0:4d:a4:69:7c brd ff:ff:ff:ff:ff:ff
     inet 192.168.178.123/24 brd 192.168.178.255 scope global dynamic noprefixroute enp4s0
+         ^^^^^^^^^^^^^^^
        valid_lft 855349sec preferred_lft 855349sec
     ...
 ```
 
 Unsere Adresse ist also `192.168.178.123`, als Port nehmen wir einfach mal
-`8080`, den Endpunkt an welchen später die Anfrage nach der Update Datei
-gesendet wird lassen wir gleich:
+`8080` und den Zusatz der URI `file.bin` an welchen später die Anfrage nach der
+Update Datei gesendet wird lassen wir gleich:
 
 ```cpp
     - t_httpUpdate_return ret = ESPhttpUpdate.update(client, "http://server/file.bin");
@@ -308,21 +309,21 @@ gesendet wird lassen wir gleich:
   }
 }
 ```
-Um einen Update Server zu starten brauchen wir nun ein Update Datei. Hierfür
-nehmen wir das Blink Beispiel welches im Blogpost zu den Entwicklungsumgebungen
+Um einen Update Server zu starten, brauchen wir nun ein Update Datei. Hierfür
+nehmen wir das Blink Beispiel, welches im Blogbeitrag zu den Entwicklungsumgebungen
 benutzt wurde. Unsere Build Artefakte werden von PlatformIO in den Ordner
 `.pio/build/nodemucv2` gelegt. Arduino nutzt normalerweise ein Temp Verzeichnis,
 in Linux oftmals `/tmp/...`, in Windows vielleicht `%APPDATA%`. Beim Bauen des
-Artefkates loggt die Arduino IDE meines Wissens nach wo das Artefakt gespeichert
-ist. 
+Artefkates loggt die Arduino IDE meines Wissens, wo das Artefakt gespeichert
+ist.
 
 Neben dem Artefakt benötigen wir noch einen HTTP Server, für unser Beispiel
 nutzen wir das Python http Modul.
-Wir gehen in den Ordner in dem das Blink Artefakt liegt. In unserem Fall ist das
-der Projekt Ordner aus dem IDE Blog Post. Wir erstellen eine Kopie des
-Artefaktes welches der gewünschten URI entspricht.
+Wir gehen in den Ordner, in dem das Blink Artefakt liegt. In unserem Fall ist das
+der Projekt Ordner aus dem IDE Blogbeitrag. Wir erstellen eine Kopie des
+Artefaktes, welches der gewünschten URI entspricht.
 Nun starten wir mit Python einen HTTP
-Server welcher auf die eigen IP und Port 8080 hört.
+Server, welcher auf die eigen IP und Port 8080 hört.
 
 ```bash
 $ cd ${IDE_BLOG_POST}
@@ -340,14 +341,14 @@ $ cp firmware.bin file.bin
 $ python -m http.server --bind 192.168.178.123 8080
 ```
 
-Nun hört der Server auf den Port 8080. Wir können lokal ersteinmal testen ob
+Nun hört der Server auf den Port 8080. Wir können lokal erst einmal testen ob
 der HTTP Server auch so funktioniert wie wir es uns wünschen:
 
 ```bash
 $ pwd
 {IDE_BLOG_POST}/blink_example/.pio/build/nodemcuv2
 $ curl 192.168.178.123:8080/file.bin > test.bin
-diff file.bin test.bin 
+diff file.bin test.bin
 
 # Kein Output zeigt dass beide Dateien gleich sind
 $ sha256sum file.bin
@@ -362,16 +363,17 @@ ACHTUNG: Damit der ESP auch den HTTP Server erreichen kann muss der TCP Port
 Distribution und Antivirus Programm muss hierfür eine Regel angelegt werden.
 Hier muss ich leider auf Google etc. verweisen.
 
-Nun können wir den ESP mit dem OTA Code flashen. Wir erwarten dass der ESP zu
-Begin sich mit dem WiFi verbindet, kurz wartet, dann unseren HTTP Server
+Nun können wir den ESP mit dem OTA Code flashen. Wir erwarten, dass der ESP zu
+Beginn sich mit dem WiFi verbindet, kurz wartet, dann unseren HTTP Server
 anfrägt, und das Blink Beispiel ausführt.
 
-Um den ESP zu flashen und hiernach die Logs welche über die serielle
-Schnittstelle geschrieben werden zu lesen:
+Um den ESP zu flashen und hiernach die Logs, welche über die serielle
+Schnittstelle geschrieben werden zu lesen, führen wir zwei Kommandos direkt
+nacheinander aus:
 
 ```bash
 $ pio run --target upload; pio device monitor -b 115200
-λ ~/rclone/dhbw/sem6/project/blog/simple-ota/ota_project_simple/ pio run --target upload ; pio device monitor -b 115200
+
 Processing nodemcuv2 (platform: espressif8266; board: nodemcuv2; framework: arduino)
 --------------------------------------------------------------------------------------
 Verbose mode can be enabled via `-v, --verbose` option
@@ -419,6 +421,6 @@ ld
 Das OTA Update war erfolgreich und der angeschlossene ESP führt nun das Blink
 Beispiel aus. Das Projekt ist
 [hier](https://github.com/buermarc/iot-blog-posts/tree/main/simple-ota) auf
-Github zu finden.  Im nächsten Blog Post schauen wir uns an wie man Updates
-Signiert um sicherzustellen, dass die erhaltenen Updates auch wirklich von uns
+Github zu finden.  Im nächsten Blog Post schauen wir uns an, wie man Updates
+signiert, um sicherzustellen, dass die erhaltenen Updates auch wirklich von uns
 stammen.

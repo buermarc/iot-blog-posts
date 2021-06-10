@@ -156,12 +156,18 @@ void update_error(int err) {
   + MQTT.send(updateTopic, format("ERROR: ESP%s failed to update", ESP_MAC)); // Pseudo Code
 }
 ```
+
 ACHTUNG: In diesem Beispiel lassen wir aber ersteinmal alles so wie es ist, und
 loggen alles mit der Serial.print Funktion. Damit das OTA Update funktioniert
 müssen wir noch valide WiFi Daten hinterlegen. Wir halten uns an ihre Vorgabe
-mit Präprozessor Definitionen in der selben Datei. Für das aktive Entwickeln in
-einem Repository bietet es sich jedoch an solche Informationen in einer
-separaten Datei zu speichern, z.B. einer neuen Header Datei `secret.h`
+mit Präprozessor Definitionen allerdings lagern wir diese in eine andere Datei
+um. Für das aktive Entwickeln in einem Repository bietet es sich an
+solche Informationen in einer separaten Datei zu speichern, z.B. einer neuen
+Header Datei `secret.h`. Deise kann dann in eine `.gitignore` Datei beigefügt
+werden um zu verhindern dass die WiFi Daten mit im der Versionsverwaltung
+landen. TIPP: Auch an die `.gitignore` Datei denken ansonsten hilft das ganze
+nur wenig.
+
 
 ```bash
 $ touch src/secret.h

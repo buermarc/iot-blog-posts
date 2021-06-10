@@ -1,4 +1,4 @@
-TXT_FILES = $(shell fi/d -name '*.mu.txt' | sed 's/\.txt/\.html/g' | sed 's/^\./build/g')
+TXT_FILES = $(shell find -name '*.mu.txt' | sed 's/\.txt/\.html/g' | sed 's/^\./build/g')
 BUILD_DIR = build
 
 all: $(TXT_FILES) .git/hooks/pre-commit

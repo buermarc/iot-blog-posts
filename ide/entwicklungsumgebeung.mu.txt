@@ -238,7 +238,7 @@ beschrieben. Falls kein genaues Dateisystem definiert ist, wird ein SPIFFS
 Dateisystem erstellt.
 
 ```bash
-$ cat platform
+$ cat platform.ini
 
 [env:nodemcuv2]
 platform = espressif8266

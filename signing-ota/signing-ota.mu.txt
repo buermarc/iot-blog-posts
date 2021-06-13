@@ -1,20 +1,20 @@
 # OTA Updates mit signierten Update Artefakten
 
 In diesem Beitrag möchten wir uns signierte Updates anschauen. Das heißt, an das
-Artefakt werden extra Information angehängt welches die Validität und den Ursprung
-des Artefaktes darstellt. Hierfür benötigen wir:
+Artefakt werden extra Information angehängt, welche es uns erlauben die Validität und den Ursprung
+des Artefaktes zu überprüfen. Hierfür benötigen wir:
 
-- Eine Umgebung für die Arduino Entwicklung: Wir nutzen wieder das PlatformIO
+- Eine Umgebung für die Arduino Entwicklung: Wir nutzen das PlatformIO
   CLI Tool
-- Das Beispiel Projekt zum simplen OTA und den dort benutzten Code als Grundlage
-- Ein Schlüsselpaar aus privatem und öffentlichen Schlüssel: Diese generieren
+- Das Beispiel Projekt zum simplen OTA Update und den dort benutzten Code als Grundlage
+- Ein Schlüsselpaar aus privatem und öffentlichem Schlüssel: Diese generieren
   wir mit mit `openssl`
 - Ein Tool zum Signieren von gebauten Artefakten: Das bekommen wir vom
   offiziellen Arduino Repository
 
-Zu Begin erweitern wir das simple OTA Projekt um die Verifizierung einer
-Signatur beim laden von neuen Artefakten vom Update Server.
-In unserem Fall Kopieren wir zu Begin das alte Projekt, wer das alte Projekt
+Zu Beginn erweitern wir das simple OTA Projekt um die Verifizierung einer
+Signatur beim Laden von neuen Artefakten vom Update Server.
+In unserem Fall Kopieren wir das alte Projekt, wer das alte Projekt
 nicht hat kann auch alternativ ein neues erstellen
 
 ```bash
@@ -31,9 +31,9 @@ $ pio init --board nodemcuv2
 ```
 
 Nun sollte `src/main.cpp` den Code aus dem letzten Beitrag beinhalten, wenn dies
-nicht der Fall ist kopieren wir ihn einfach hinein:
+nicht der Fall ist, kopieren wir ihn einfach hinein:
 
-```cpp  
+```cpp
 /**
    httpUpdate.ino
 
@@ -130,7 +130,7 @@ void loop() {
 }
 ```
 
-Bevor wir tatsächlich den Code ̈́ändern schauen wir uns an welche Signatur die
+Bevor wir tatsächlich den Code ändern, schauen wir uns an welche Signatur die
 Arduino Bibliothek erwartet und wie wir diese erstellen können. Das Artefakt
 selbst wird erweitert durch ein SHA256 Hash des eigentlichen Artefakts, welcher
 durch einen RSA Key signiert wird. Letztendlich wird die Länge der Signatur als
@@ -138,18 +138,18 @@ uint32_t, also einem unsigned integer mit der Größe 32 bit, an das Ende gehän
 Die finale Datei hat folgendes Layout:
 ```
 | Unsigned Plain Artefakt | Signed Hash | uint32_t length |
-``` 
-Das Signieren selbst kann eigentlich die Arduino IDE für uns übernehmen sobald
+```
+Das Signieren selbst kann eigentlich die Arduino IDE für uns übernehmen, sobald
 wir die benötigten Schlüssel bereitstellen. Da wir allerdings das PlatformIO CLI
-Tool nutzen müssen wir für diese Projekt selbst signieren. 
+Tool nutzen müssen wir für diese Projekt selbst signieren.
 (Vielleicht kann das CLI Tool auch Signaturen selbständig erstellen, ich habe
 aber nicht herausgefunden ob und wie)
 
 Die benötigten Schlüssel erstellen wir mit Hilfe von `openssl`.
 Wir erstellen innerhalb des Projekt Verzeichnisses einen neuen Ordner für unsere
-Keys, wechseln in dieses neues Verzeichnis und erstellen die benötigten RSA-2048
-Keys. Eigentlich wären auch RSA-4096 möglich aber hierzu gibt es in einem
-späteren Blogpost noch weiter Informationen.
+Keys, wechseln in dieses neue Verzeichnis und erstellen die benötigten RSA-2048
+Keys. Eigentlich wären auch RSA-4096 möglich, aber hierzu gibt es in einem
+späteren Blogbeitrag noch weiter Informationen.
 
 ```bash
 $ tree
@@ -175,7 +175,7 @@ public.key
 ```
 
 Als nächstes laden wir das Signier-Tool herunter welches wir in einem neuen
-`tool` Ordner abspeichern. Des weiteren erstellen wir ein Makefile, welches
+`tool` Ordner abspeichern. Des Weiteren erstellen wir ein `Makefile`, welches
 es uns vereinfacht Artefakte direkt nach dem Bau zu signieren.
 
 ```bash
@@ -195,7 +195,7 @@ $ tree
 ├── test
 │   └── README
 └── update_server.sh
-$ mkdir tools 
+$ mkdir tools
 $ curl https://raw.githubusercontent.com/esp8266/Arduino/master/tools/signing.py > tools/signing.py
 $ touch Makefile
 $ # Füllen des Makefiles, s.t.
@@ -218,19 +218,19 @@ Zeichen `\` ausgeschrieben werden, wobei nach dem `\` kein Leerzeichen mehr
 stehen darf.
 
 Somit haben wir nun die Möglichkeit unsere Artefakte zu Signieren. Nun müssen
-wir noch den Code anpassen, so dass auch überprüft wird ob das gesendete
+wir noch den Code anpassen, so dass auch überprüft wird, ob das gesendete
 Artefakt valide ist. Der Code braucht dabei unseren Public Key, denn bei
 asynchroner Kryptographie kann eine Nachricht mit dem privaten Key signiert
-werden und später mit einem öffentlichem Schlüssel verifiziert werden.
-Wenn wir gleich den Code betrachten sehen wir des weiteren ein paar Präprozessor
-Statements wie `if MANUAL_SIGNING`, diese werden benötigt wenn die Arduino IDE
-den Code von sich selbst aus signiert, dann wird unserer Zusatz nicht mit in das
-wirklichen kompilierte Artefakt eingebunden, da die Arduino IDE dies schon von
-sich aus macht. Da wir allerdings das PlatformIO CLI Tool nutzen setzen wir die
-einfach `MANUAL_SIGNING` auf 1. 
+werden und später mit einem öffentlichen Schlüssel verifiziert werden.
+Wenn wir gleich den Code betrachten sehen wir des Weiteren ein paar Präprozessor
+Statements wie `if MANUAL_SIGNING`, diese werden benötigt, wenn die Arduino IDE
+den Code von sich selbst aus signiert, dann wird unser Zusatz nicht mit in das
+wirkliche kompilierte Artefakt eingebunden, da die Arduino IDE dies schon von
+sich ausmacht. Da wir allerdings das PlatformIO CLI Tool nutzen setzen wir
+`MANUAL_SIGNING` auf 1.
 
-Der erste Teil den wir hinzufügen ist eine Präprozessor Definition, unser
-öffentlicher Schlüssel, und ein paar Deklarationen die wir später noch nutzen:
+Der erste Teil, den wir hinzufügen ist, eine Präprozessor Definition, unser
+öffentlicher Schlüssel, und ein paar Deklarationen, die wir später noch nutzen:
 
 - ein Objekt für den öffentlichen Schlüssel
 - ein Objekt für einen SHA256 Hash
@@ -244,7 +244,7 @@ Der erste Teil den wir hinzufügen ist eine Präprozessor Definition, unser
 #include "secret.h"
 
 + #define MANUAL_SIGNING 1
-+ 
++
 + const char pubkey[] PROGMEM = R"EOF(
 + -----BEGIN PUBLIC KEY-----
 + MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEArSf4W99aciiCoDH427w5
@@ -269,7 +269,7 @@ void setup() {
 ...
 ```
 
-Dies Objekte nutzen wir später in der setup Methode um beim späteren Update die
+Dies Objekte nutzen wir später in der `setup` Methode, um beim späteren Update die
 Signatur des Artefaktes mit Hilfe unseres öffentlichen Schlüssels auch
 überprüfen zu können.
 
@@ -294,8 +294,8 @@ Signatur des Artefaktes mit Hilfe unseres öffentlichen Schlüssels auch
 ...
 ```
 
-Nun müssen wir zu aller letzt dem Updater signalisieren dass wir die Signatur
-überprüfen möchten. Zudem ändern wir die URL welche der Updater anfragt, sodass
+Nun müssen wir zu aller letzt dem Updater signalisieren, dass wir die Signatur
+überprüfen möchten. Zudem ändern wir die URL, welche der Updater anfragt, sodass
 das signierte Artefakt geladen wird.
 
 ```cpp
@@ -316,11 +316,11 @@ void loop() {
 ...
 ```
 
-Somit wird der ESP8266 jedes neue Artefakt auf eine valide Signatur überprüfen.
-Um dies auszuprobieren müssen wir nun diesen Code flashen und einen Update
-Server bereitstellen mit einem valide signierten Artefakt. Daher kümmern wir uns
-ersteinmal um das valide signierte Artefakt. Als Beispiel Artefakt nutzen wir
-wieder das Blink Beispiel aus dem Blog Beitrag zu den Entwicklungsumgebungen. Um
+Nun wird der ESP8266 jedes neue Artefakt auf eine valide Signatur überprüfen.
+Um dies auszuprobieren, müssen wir nun diesen Code flashen und einen Update
+Server bereitstellen mit einem validen signierten Artefakt. Daher kümmern wir uns
+erst einmal um das valide signierte Artefakt. Als Beispiel Artefakt nutzen wir
+wieder das Blink Beispiel aus dem Blogbeitrag zu den Entwicklungsumgebungen. Um
 dies zu Signieren kopieren wir unser erstelltes Makefile in den Ordner in
 welchem wir den Code zum Blink Beispiel haben, sowie den Ordner `./tools` in
 welchem das Signier-Tool liegt und `./keys` in welchem unsere Schlüssel liegen.
@@ -336,18 +336,18 @@ $ python -m http.server --directory ./.pio/build/nodemcuv2/ --bind 192.168.178.1
 ```
 
 Um den HTTP Server zu testen könnten wir wieder mit `curl` eine GET Anfrage
-schicken und mit `diff` oder `sha256sum` überprüfen ob wir die richtige Datei
-erhalten. Falls etwas nicht funktioniert ist dies immer ein guter Anhaltspunkt
+schicken und mit `diff` oder `sha256sum` überprüfen, ob wir die richtige Datei
+erhalten. Falls etwas nicht funktioniert, ist dies immer ein guter Anhaltspunkt
 um mögliche Fehler auszuschliessen.
 
-Während der Update Server nun läuft können wir zurück in das ursprüngliche
-Projekt gehen welches die signierten Artefakte beinhaltet, und mit PlatformIO
+Während der Update Server nun läuft, können wir zurück in das ursprüngliche
+Projekt gehen, welches die signierten Artefakte beinhaltet, und mit PlatformIO
 den Code kompilieren und flashen. Wir erwarten nun, dass wie beim einfachen OTA
 Beispiel der Updater zuerst wartet und dann eine Anfrage an unseren Update
 Server stellt. Die erhaltene Datei wird dann überprüft, sollte als gültig
 empfunden werden und mit einem Neustart des Mikrocontrollers ausgeführt werden.
 
-WICHTIG: Der HTTP Server muss auch von außen erreichbare sein d.h. der TCP Port
+WICHTIG: Der HTTP Server muss auch von außen erreichbare sein, d.h. der TCP Port
 8080 muss geöffnet sein.
 
 ```bash
@@ -389,12 +389,12 @@ v2843a5ac
 ld
 ```
 
-Wie man in dem Abschnitt aus dem gekürzten Log Output sieht war das Update
+Wie man in dem Abschnitt aus dem gekürzten Log Output sieht, war das Update
 erfolgreich. Aber um sicher zu gehen, dass ein unsigniertes Update oder eine
-invalide Signatur nicht funktioniert sollten wir noch überprüfen ob das Update
+invalide Signatur nicht funktioniert, sollten wir noch überprüfen, ob das Update
 fehlschlägt, wenn wir ein invalides Artefakt bereitstellen.
 Hierfür können wir im Build Ordner des Blink Projektes zum einen die unsignierte
-Version umbenennen, so dass der HTTP Server dies zurück gibt.
+Version umbenennen, so dass der HTTP Server dies zurückgibt.
 
 ```bash
 $ cd ${BLINK_EXAMPLE}
@@ -408,14 +408,24 @@ HTTP_UPDATE_FAILD Error (12): Update error: ERROR[12]: Signature verification fa
 ```
 Unsignierte Artefakte werden also nicht mehr akzeptiert. Unser momentaner Code
 würde nach dem fehlgeschlagenen Update einfach wieder probieren zu updaten. Das
-ist im Betrieb nicht gewünscht aber hier als Proof of Concept können wir das
+ist im Betrieb nicht gewünscht aber hier als Proof-of-Concept können wir das
 vorerst so lassen. Was wir allerdings noch überprüfen können wäre eine invalide
 Signatur.
 Um ein Artefakt mit invalider Signatur zu erhalten könnten wir entweder ein
 neues Schlüsselpaar erstellen und hiermit signieren oder das bestehende Artefakt
-verändern. Da wir wissen wo die Signatur zu finden ist nehmen wir den zweiteren
-Weg. Zu Begin erstellen wir wieder ein valide signiertes Artefakt und wechseln
-in den Build Ordner.
+in minimaler Weise verändern.
+Zur Erinnerung hier das Layout:
+
+```
+| Unsigned Plain Artefakt | Signed Hash | uint32_t length |
+```
+
+Nun müssen wir die Signatur verändern.
+Um auch wirklich zu zeigen, dass die Signatur nur minimal geändert werden muss,
+um ein invalides Artefakt zu erhalten, wollen wir nun nur genau ein Byte des
+Artefaktes ändern. Theoretisch gesehen ist es egal, wo wir das Byte ändern, da
+entweder die Signatur invalide wird, die Länge der Signatur nicht mehr stimmt,
+oder der SHA256 Hash sich unterscheidet.
 
 ```bash
 $ cd ${blink_example}
@@ -423,23 +433,11 @@ $ make
 $ cd .pio/build/nodemcuv2
 ```
 
-Nun müssen wir die Signatur verändern, das Problem ist allerdings, dass das
-Artefakt in binärer Form vorhanden ist. Wir wollen nun an der Stelle an welcher
-die Signatur ist die Datei ändern.
-Zur Erinnerung hier das Layout:
-```
-| Unsigned Plain Artefakt | Signed Hash | uint32_t length |
-``` 
-Um auch wirklich zu zeigen dass die Signatur nur minimal geändert werden muss um
-ein invalides Artefakt zu erhalten wollen wir nun nur ein Byte des Artefaktes
-ändern. Theoretisch gesehen ist es egal wo wir das Byte ändern da entweder die
-Signatur invalide wird, die Länge der Signatur nicht mehr stimmt, oder der
-SHA256 Hash sich unterscheidet.
-
-Um ein Byte zu ändern öffnen wir das Artefakt mit VIM.
+Um ein Byte zu ändern, öffnen wir das Artefakt mit VIM.
 WICHTIG: Die Datei mit der Flagge `-b` öffnen, ansonsten erwartet VIM UTF-8
-encoding anstatt eine binäre Datei, hierdurch würde das Umwandeln in HEX nicht
-richtig funktionieren.
+encoding anstatt einer binäre Datei, hierdurch würde das Umwandeln in HEX nicht
+richtig funktionieren. Für dieses Beispiel ändern wir nun wirklich die
+eigentliche Signatur, welche an das Artefakt angehängt wurde.
 
 ```bash
 $ vim -b firmware.bin.signed
@@ -460,9 +458,9 @@ $ vim -b firmware.bin.signed
  NORMAL  firmware.bin.signed                        unix | utf-8 | no ft    0%    1:1
 ```
 
-Wie wir sehen ist die Datei voller unverständlicher Zeichen, wenn wir hier etwas
-ändern kann es sein, dass mehr oder weniger als ein Byte geändert wird. Daher
-nutzen wir `xxd` um die Datei in Hexadezimalen angezeigt zu bekommen. 
+Wie wir sehen, ist die Datei voller unverständlicher Zeichen, wenn wir hier etwas
+ändern, kann es sein, dass mehr oder weniger als ein Byte geändert wird. Daher
+nutzen wir `xxd` um die Datei in Hexadezimalen angezeigt zu bekommen.
 Wir tippen in VIM:
 
 ```
@@ -505,11 +503,11 @@ Nun gehen wir an das Ende der Datei durch das Drücken der Taste `G`.
 0003fe50: 195d f87a 321b e15e 6fff 3d16 582d cb03  .].z2..^o.=.X-..
 0003fe60: 6664 01bb 55b7 6f52 20ce 04e0 d28f eee8  fd..U.oR .......
 0003fe70: 0001 0000                                ....
-          ^^^^ ^^^^ 
+          ^^^^ ^^^^
 ```
 
-Um nun die Signatur zu finden müssen wir die Länge eines uint32_t wissen.  Diese
-ist 32 Bit also 8 Bytes. Ein Hexadezimale Tuple z.B. `fd` ist ein Byte.  
+Um nun die Signatur zu finden, müssen wir die Länge eines uint32_t wissen.  Diese
+ist 32 Bit also 8 Bytes. Ein Hexadezimale Tuple z.B. `fd` ist ein Byte.
 Zudem wissen wir, dass die Länge ganz am Ende der Datei ist.
 D.h.
 `0001 0000` ist die Länge der Signatur als uint32_t.  Daher ist der Block zuvor
@@ -532,12 +530,12 @@ Vorletzten Zeile `6`, welches wir in `7` abändern.
 0003fe50: 195d f87a 321b e15e 6fff 3d16 582d cb03  .].z2..^o.=.X-..
 0003fe60: 7664 01bb 55b7 6f52 20ce 04e0 d28f eee8  fd..U.oR .......   <--- Hier
           ^
-0003fe70: 0001 0000                                .... 
+0003fe70: 0001 0000                                ....
 ```
 
-Nun wechseln wir von der Hexadezimal Ansicht wieder in die Binär Ansicht und
+Nun wechseln wir von der Hexadezimal Ansicht wieder in die binäre Ansicht und
 speichern das Artefakt.
-In VIM tippe:
+Wir tippen in VIM:
 
 ```
 :%!xxd -r
@@ -551,8 +549,11 @@ können wir überprüfen, ob die Dateien gleichgroß sind.
 
 ```bash
 $ cd ${BLINK_EXAMPLE}
+$ # Wir gehen in das Build Verzeichnis
 $ cd .pio/build/nodemcuv2
+$ # Das abgeänderte Artefakt wird umbenannt
 $ cp firmware.bin.signed invalid.bin.signed
+$ # Wir erstellen eine neue signierte Version des Artefakts
 $ make -C ../../..
 $ diff firmware.bin.signed invalid.bin.signed
 Binary files firmware.bin.signed and invalid.bin.signed differ
@@ -562,7 +563,7 @@ $ du -b invalid.bin.signed
 261748  invalid.bin.signed
 ```
 
-Nun flashen wir den ESP wieder mit dem Code welcher ein valide signiertes
+Nun flashen wir den ESP wieder mit dem Code welcher ein valides signiertes
 Artefakt erwartet.
 
 ```bash
@@ -574,9 +575,9 @@ HTTP_UPDATE_FAILD Error (12): Update error: ERROR[12]: Signature verification fa
 ```
 
 Und auch hier ist das Update wie gewünscht nicht erfolgreich. Somit haben wir
-nun OTA Updates die sicher nur dann erfolgreich sind, wenn unser Artefakt mit
+nun OTA Updates, die sicher nur dann erfolgreich sind, wenn unser Artefakt mit
 dem von uns erstellten privaten Schlüssel signiert ist. Der private Schlüssel
 sollte daher nicht in die Versions Kontrolle mit eingecheckt werden.  Generell
-sollte für die Produktion nicht die gleichen Schlüssel wie für den eigentlichen
-Betrieb genutzt werden. Das schützt den laufende Betrieb und verhindert böse
+sollten für die Produktion nicht die gleichen Schlüssel wie für den eigentlichen
+Betrieb genutzt werden. Das schützt den laufenden Betrieb und verhindert böse
 Missgeschicke.

@@ -4,7 +4,7 @@ BUILD_DIR = build
 
 all: $(TXT_FILES) .git/hooks/pre-commit
 
-doc: $(DOCX_FILES)
+doc: $(DOCX_FILES) all
 
 $(BUILD_DIR)/%.html: %.txt
 	mkdir -p $(shell dirname $(basename $@))

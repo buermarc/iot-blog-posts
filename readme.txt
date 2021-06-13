@@ -8,7 +8,7 @@ Order:
 ./two-way-secure-signing-ota
 ./esp-tls-mqtt
 
-Stuff that I will have to write about:
+Content for future posts:
 - Spring Backend
 
 Other things that are interesting:

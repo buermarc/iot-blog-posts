@@ -1,10 +1,15 @@
 # OTA Updates mit signierten Update Artefakten
 
 In diesem Beitrag möchten wir uns signierte Updates anschauen. Das heißt, an das
-Artefakt werden extra Information angehängt, welche es uns erlauben die Validität und den Ursprung
-des Artefaktes zu überprüfen. Hierfür benötigen wir:
+Artefakt werden extra Information angehängt, welche es uns erlauben die
+Validität und den Ursprung des Artefaktes zu überprüfen. Diese Funktionalität
+wird benötigt, um sicherzustellen, dass nur wir selbst Updates auf unseren
+ESP8622 durchführen und kein Unbefugter Zugriff erlangen kann.  Hierfür
+benötigen wir:
 
-- Eine Umgebung für die Arduino Entwicklung: Wir nutzen das PlatformIO
+- Eine Umgebung für die Arduino Entwicklung: Wir nutzen das, wie bereits in
+  [diesem](https://www.iot-embedded.de/iot-2021/beverage-monitoring/aufsetzen-verschiedener-entwicklungsumgebungen-fuer-den-esp8266/)
+  Beitrag beschrieben, PlatformIO
   CLI Tool
 - Das Beispiel Projekt zum simplen OTA Update und den dort benutzten Code als Grundlage
 - Ein Schlüsselpaar aus privatem und öffentlichem Schlüssel: Diese generieren
@@ -294,7 +299,7 @@ Signatur des Artefaktes mit Hilfe unseres öffentlichen Schlüssels auch
 ...
 ```
 
-Nun müssen wir zu aller letzt dem Updater signalisieren, dass wir die Signatur
+Nun müssen wir zuallerletzt dem Updater signalisieren, dass wir die Signatur
 überprüfen möchten. Zudem ändern wir die URL, welche der Updater anfragt, sodass
 das signierte Artefakt geladen wird.
 
@@ -337,8 +342,8 @@ $ python -m http.server --directory ./.pio/build/nodemcuv2/ --bind 192.168.178.1
 
 Um den HTTP Server zu testen könnten wir wieder mit `curl` eine GET Anfrage
 schicken und mit `diff` oder `sha256sum` überprüfen, ob wir die richtige Datei
-erhalten. Falls etwas nicht funktioniert, ist dies immer ein guter Anhaltspunkt
-um mögliche Fehler auszuschliessen.
+erhalten. Falls etwas nicht funktioniert, ist dies immer ein guter Anhaltspunkt,
+um mögliche Fehler auszuschließen.
 
 Während der Update Server nun läuft, können wir zurück in das ursprüngliche
 Projekt gehen, welches die signierten Artefakte beinhaltet, und mit PlatformIO
